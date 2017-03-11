@@ -1,0 +1,21 @@
+# autotools stuff
+/aclocal.m4
+/autom4te.cache/
+/build-aux/
+/config.*
+/configure
+/INSTALL
+/Makefile
+/Makefile.in
+
+autoconfig.*
+.deps/
+.dirstamp
+stamp-h1
+
+# built objects
+*.o
+
+# binaries
+src/coincer
+src/coincerd
