@@ -3,7 +3,8 @@ ACLOCAL_AMFLAGS = -I m4 --install
 bin_PROGRAMS = src/coincerd src/coincer
 
 src_coincerd_SOURCES = \
-	src/coincerd.c
+	src/coincerd.c \
+	src/p2p.c src/p2p.h
 
 src_coincerd_CFLAGS = $(AM_CFLAGS) $(LIBEVENT_CFLAGS)
 src_coincerd_LDADD  = $(AM_LDADD) $(LIBEVENT_LIBS)

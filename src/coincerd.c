@@ -16,6 +16,10 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
+
+#include "p2p.h"
+
 int main(void)
 {
 	/*
@@ -35,6 +39,10 @@ int main(void)
 	 *
 	 * - terminate on SIGTERM
 	 */
+
+	int r;
+	if ((r = listen_init()) != 0)
+		return r;
 
 	return 0;
 }
