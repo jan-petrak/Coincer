@@ -43,6 +43,6 @@ int main(void)
 	int r;
 	if ((r = listen_init()) != 0)
 		return r;
-    
+
 	return 0;
 }
