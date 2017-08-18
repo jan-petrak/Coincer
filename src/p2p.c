@@ -116,7 +116,7 @@ int listen_init(struct event_base **base)
 {
 
 	struct evconnlistener *listener;
-	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
 
 	int port = 31070;
 
@@ -126,14 +126,14 @@ int listen_init(struct event_base **base)
 		return 1;
 	}
 
-	memset(&sin, 0x0, sizeof(sin));
-	sin.sin_family = AF_INET;
-	sin.sin_addr.s_addr = htonl(0);
-	sin.sin_port = htons(port);
+	memset(&sin6, 0x0, sizeof(sin6));
+	sin6.sin6_family = AF_INET6;
+	sin6.sin6_addr = in6addr_any;
+	sin6.sin6_port = htons(port);
 
 	listener = evconnlistener_new_bind(*base, accept_conn_cb, NULL,
 		LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
-		(struct sockaddr*)&sin, sizeof(sin));
+		(struct sockaddr*)&sin6, sizeof(sin6));
 	if (!listener) {
 		perror("Couldn't create listener");
 		return 1;
