@@ -16,7 +16,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
+#include <event2/event.h>
 
 #include "p2p.h"
 
@@ -40,9 +40,13 @@ int main(void)
 	 * - terminate on SIGTERM
 	 */
 
+	struct event_base *base;
+
 	int r;
-	if ((r = listen_init()) != 0)
+	if ((r = listen_init(&base)) != 0)
 		return r;
+
+	event_base_dispatch(base);
 
 	return 0;
 }
