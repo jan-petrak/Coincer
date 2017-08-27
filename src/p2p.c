@@ -1,21 +1,24 @@
+#include <arpa/inet.h>		/* inet_ntop */
+#include <errno.h>
 #include <event2/listener.h>
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
-
-#include <arpa/inet.h>
-#include <string.h>
-#include <stdlib.h>
+#include <netinet/in.h>		/* sockaddr_in6 */
 #include <stdio.h>
-#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "p2p.h"
 
 /**
+ * Processing a P2P message.
+ *
  * @brief callback for reading an input buffer
- * @param bev buffer to read data from
- * @param ctx optional programmer-defined data to be passed into this callback
+ * @param	bev	buffer to read data from
+ * @param	ctx	optional programmer-defined data to be passed into this
+ * 			callback
  */
-static void read_cb(struct bufferevent *bev, void *ctx)
+static void p2p_process(struct bufferevent *bev, void *ctx)
 {
 
 	struct evbuffer *input = bufferevent_get_input(bev);
@@ -52,6 +55,18 @@ static void event_cb(struct bufferevent *bev, short events, void *ctx)
 }
 
 /**
+ * Simple helper for conversion of sockaddr to a textual IP address.
+ *
+ * @param	addr	sockaddr data
+ * @param	ip	Destination string buffer
+ */
+static void ip_to_string(struct sockaddr *addr, char *ip)
+{
+	struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *) addr;
+	inet_ntop(AF_INET6, &addr_in6->sin6_addr, ip, INET6_ADDRSTRLEN);
+}
+
+/**
  * @brief callback for accepting a new connection
  * @param listener incoming connection
  * @param fd file descriptor for the new connection
@@ -59,42 +74,27 @@ static void event_cb(struct bufferevent *bev, short events, void *ctx)
  * @param socklen size of address
  * @param ctx optional programmer-defined data to be passed into this callback
  */
-static void accept_conn_cb(struct evconnlistener *listener,
-	evutil_socket_t fd, struct sockaddr *address, int socklen,
-	void *ctx)
+static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
+			   struct sockaddr *addr, int socklen, void *ctx)
 {
+	/* to display IP address of the other peer */
+	char ip[INET6_ADDRSTRLEN + 1];	/* NOTE: not sure if +1 is needed... */
+
 	/* Set up a bufferevent for a new connection */
 	struct event_base *base = evconnlistener_get_base(listener);
-	struct bufferevent *bev = bufferevent_socket_new(
-		base, fd, BEV_OPT_CLOSE_ON_FREE);
+	struct bufferevent *bev = bufferevent_socket_new(base, fd,
+							 BEV_OPT_CLOSE_ON_FREE);
 
-	bufferevent_setcb(bev, read_cb, NULL, event_cb, NULL);
+	struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *) addr;
 
-	bufferevent_enable(bev, EV_READ|EV_WRITE);
+	/* subscribe every received P2P message to be processed */
+	bufferevent_setcb(bev, p2p_process, NULL, event_cb, NULL);
 
+	/* TODO: we should want disconnections as well */
+	bufferevent_enable(bev, EV_READ | EV_WRITE);
 
-	/* Display IP address of the one connecting to us */
-	char *s = NULL;
-
-	switch (address->sa_family) {
-		case AF_INET: {
-			struct sockaddr_in *addr_in = (struct sockaddr_in *) address;
-			s = malloc(INET_ADDRSTRLEN);
-			inet_ntop(AF_INET, &(addr_in->sin_addr), s, INET_ADDRSTRLEN);
-			break;
-		}
-		case AF_INET6: {
-			struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *) address;
-			s = malloc(INET6_ADDRSTRLEN);
-			inet_ntop(AF_INET6, &(addr_in6->sin6_addr), s, INET6_ADDRSTRLEN);
-			break;
-		}
-		default:
-			break;
-	}
-
-	printf("%s has connected to you.\n", s);
-	free(s);
+	ip_to_string(addr, ip);
+	printf("New connection from [%s]:%d\n", ip, ntohs(addr_in6->sin6_port));
 }
 
 /**
@@ -116,7 +116,7 @@ int listen_init(struct event_base **base)
 {
 
 	struct evconnlistener *listener;
-	struct sockaddr_in6 sin6;
+	struct sockaddr_in6 sock_addr;
 
 	int port = 31070;
 
@@ -126,14 +126,17 @@ int listen_init(struct event_base **base)
 		return 1;
 	}
 
-	memset(&sin6, 0x0, sizeof(sin6));
-	sin6.sin6_family = AF_INET6;
-	sin6.sin6_addr = in6addr_any;
-	sin6.sin6_port = htons(port);
+	/* listening on :: and a default port */
+	memset(&sock_addr, 0x0, sizeof(sock_addr));
+	sock_addr.sin6_family = AF_INET6;
+	sock_addr.sin6_addr = in6addr_any;
+	sock_addr.sin6_port = htons(port);
 
 	listener = evconnlistener_new_bind(*base, accept_conn_cb, NULL,
-		LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
-		(struct sockaddr*)&sin6, sizeof(sin6));
+					   LEV_OPT_CLOSE_ON_FREE |
+					   LEV_OPT_REUSEABLE, -1,
+					   (struct sockaddr *) &sock_addr,
+					   sizeof(sock_addr));
 	if (!listener) {
 		perror("Couldn't create listener");
 		return 1;

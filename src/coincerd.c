@@ -40,13 +40,14 @@ int main(void)
 	 * - terminate on SIGTERM
 	 */
 
-	struct event_base *base;
+	struct event_base *event_loop;
 
-	int r;
-	if ((r = listen_init(&base)) != 0)
-		return r;
+	int ret;
+	if ((ret = listen_init(&event_loop))) {
+		return ret;
+	}
 
-	event_base_dispatch(base);
+	event_base_dispatch(event_loop);
 
 	return 0;
 }
