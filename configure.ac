@@ -27,6 +27,7 @@ dnl Checks for libraries.
 PKG_PROG_PKG_CONFIG
 PKG_CHECK_MODULES([JANSSON], [jansson])
 PKG_CHECK_MODULES([LIBEVENT], [libevent])
+PKG_CHECK_MODULES([LIBSODIUM], [libsodium])
 
 dnl Checks for header files.
 
