@@ -1,7 +1,10 @@
 ~~~ Code style ~~~
 - based on K&R conventions
+- indentation is based on TABs (standard width)
 - line length: 80 characters
 - comments: /* like this */
+- do not leave trailing spaces on lines and lines in files
+- all files are terminated with a \n
 
 
 %%% If statements
