@@ -31,12 +31,13 @@
 /**
  * Processing a P2P message.
  *
- * @brief callback for reading an input buffer
+ * @brief Callback for reading an input buffer
  * @param	bev	buffer to read data from
  * @param	ctx	optional programmer-defined data to be passed into this
  * 			callback
  */
-static void p2p_process(struct bufferevent *bev, void *ctx)
+static void p2p_process(struct bufferevent *bev,
+			void *ctx __attribute__((unused)))
 {
 
 	struct evbuffer *input = bufferevent_get_input(bev);
@@ -53,19 +54,24 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 
 	/* Copy all the data from the input buffer to the output buffer */
 	evbuffer_add_buffer(output, input);
+
+	/* TODO/FIXME: this is wrong PoC: the input buffer should be discarded
+	 * and the output one filled with our data
+	 */
 }
 
 /**
- * @brief callback for bufferevent event detection
- * @param bev bufferevent on which the event occured
- * @param events flags of the events occured
- * @param ctx optional programmer-defined data to be passed into this callback
+ * @brief Callback for bufferevent event detection
+ * @param	bev	bufferevent on which the event occured
+ * @param	events	flags of the events occured
+ * @param	ctx	optional programmer-defined data to be passed into this
+ * 			callback
  */
-static void event_cb(struct bufferevent *bev, short events, void *ctx)
+static void event_cb(struct bufferevent *bev, short events,
+		     void *ctx __attribute__((unused)))
 {
-
 	if (events & BEV_EVENT_ERROR) {
-		perror("Error from bufferevent");
+		fprintf(stderr, "Error from bufferevent");
 	}
 	if (events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
 		bufferevent_free(bev);
@@ -85,15 +91,20 @@ static void ip_to_string(struct sockaddr *addr, char *ip)
 }
 
 /**
- * @brief callback for accepting a new connection
- * @param listener incoming connection
- * @param fd file descriptor for the new connection
- * @param address routing information
- * @param socklen size of address
- * @param ctx optional programmer-defined data to be passed into this callback
+ * Callback function. It handles accepting new connections.
+ *
+ * @brief Callback for accepting a new connection
+ * @param	listener	incoming connection
+ * @param	fd		file descriptor for the new connection
+ * @param	address		routing information
+ * @param	socklen		size of address
+ * @param	ctx		optional programmer-defined data to be passed
+ * 				into this callback; is NULL
  */
-static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
-			   struct sockaddr *addr, int socklen, void *ctx)
+static void accept_connection(struct evconnlistener *listener,
+			      evutil_socket_t fd, struct sockaddr *addr,
+			      int socklen __attribute__((unused)),
+			      void *ctx __attribute__((unused)))
 {
 	/* to display IP address of the other peer */
 	char ip[INET6_ADDRSTRLEN + 1];	/* NOTE: not sure if +1 is needed... */
@@ -108,7 +119,6 @@ static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	/* subscribe every received P2P message to be processed */
 	bufferevent_setcb(bev, p2p_process, NULL, event_cb, NULL);
 
-	/* TODO: we should want disconnections as well */
 	bufferevent_enable(bev, EV_READ | EV_WRITE);
 
 	ip_to_string(addr, ip);
@@ -116,11 +126,13 @@ static void accept_conn_cb(struct evconnlistener *listener, evutil_socket_t fd,
 }
 
 /**
- * @brief callback for listener error detection
- * @param listener listener on which the error occured
- * @param ctx optional programmer-defined data to be passed into this callback
+ * @brief Callback for listener error detection
+ * @param	listener	listener on which the error occured
+ * @param	ctx		optional programmer-defined data to be passed
+ * 				into this callback
  */
-static void accept_error_cb(struct evconnlistener *listener, void *ctx)
+static void accept_error_cb(struct evconnlistener *listener,
+			    void *ctx __attribute__((unused)))
 {
 	struct event_base *base = evconnlistener_get_base(listener);
 	int err = EVUTIL_SOCKET_ERROR();
@@ -130,13 +142,20 @@ static void accept_error_cb(struct evconnlistener *listener, void *ctx)
 	event_base_loopexit(base, NULL);
 }
 
+/**
+ * @brief Initialize listening and set up callbacks
+ *
+ * @param	base	The event loop
+ *
+ * @return	1 if an error occured
+ * @return	0 if successfully initialized
+ */
 int listen_init(struct event_base **base)
 {
-
 	struct evconnlistener *listener;
 	struct sockaddr_in6 sock_addr;
 
-	int port = 31070;
+	int port = DEFAULT_PORT;
 
 	*base = event_base_new();
 	if (!*base) {
@@ -150,13 +169,13 @@ int listen_init(struct event_base **base)
 	sock_addr.sin6_addr = in6addr_any;
 	sock_addr.sin6_port = htons(port);
 
-	listener = evconnlistener_new_bind(*base, accept_conn_cb, NULL,
+	listener = evconnlistener_new_bind(*base, accept_connection, NULL,
 					   LEV_OPT_CLOSE_ON_FREE |
 					   LEV_OPT_REUSEABLE, -1,
 					   (struct sockaddr *) &sock_addr,
 					   sizeof(sock_addr));
 	if (!listener) {
-		perror("Couldn't create listener");
+		perror("Couldn't create listener: evconnlistener_new_bind");
 		return 1;
 	}
 	evconnlistener_set_error_cb(listener, accept_error_cb);
