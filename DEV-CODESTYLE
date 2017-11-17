@@ -7,6 +7,22 @@
 - all files are terminated with a \n
 
 
+%%% Comments
+/* single line comment (before code) */
+foo();		/* short comment on a line with code */
+
+/* some in-code comment that spreads multiple lines; please note that it matters
+ * how you handle the beginning, continuation and ending of the comment
+ */
+
+/*
+ * Proper big comment has first line empty.
+ *
+ * Then it continues normally.
+ * And so is terminated.
+ */
+
+
 %%% If statements
 if (var <= 64) {
 	return 0;
