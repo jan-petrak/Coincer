@@ -1,0 +1,32 @@
+~~~ Developers’ Handbook ~~~
+* Basic rules
+- always discuss your problem with other developers or with maintainer of the
+  appropriate section
+- stick with the project style and don’t import your own habits
+- be present on developer’s IRC
+- be inclusive: discuss your development efforts with others, keep everyone in
+  the loop
+
+* Git
+- try to make clean commits (`git diff --staged` before commiting)
+- break things into commits that make sense (`git add -p` to choose changes)
+- push upstream only commits with changes you want to record forever in the
+  repository
+- write descriptive commit messages
+- use .git/info/exclude to ignore your personal stuff, .gitignore to ignore
+  general files that most people will have in their tree
+
+* Filenames and identifiers
+- keep letters small
+- if you need more words in a name, use the underscore character (_)
+- name them reasonably
+- don’t use global variables unless *really* needed
+- if you create new source files, copy the standard header comment in there
+
+* Documentation
+- always accompany your code with comments so that others can read it without
+  spending time on figuring out what it is meant to do
+- document functions and structures with doxygen comments
+
+* Open questions
+- typedefs
