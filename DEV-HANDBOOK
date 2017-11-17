@@ -8,7 +8,7 @@
   the loop
 
 * Git
-- try to make clean commits (`git diff --staged` before commiting)
+- try to make clean commits (`git diff --staged` before committing)
 - break things into commits that make sense (`git add -p` to choose changes)
 - push upstream only commits with changes you want to record forever in the
   repository
