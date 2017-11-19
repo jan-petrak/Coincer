@@ -17,7 +17,7 @@ AM_INIT_AUTOMAKE([subdir-objects -Wall -Werror])
 AC_CONFIG_FILES([Makefile])
 
 dnl Compiler flags
-AM_CFLAGS="-std=c89 -Wall -Wextra"
+AM_CFLAGS="-std=c89 -pedantic -Wall -Wextra"
 
 dnl Checks for programs.
 dnl C compiler
