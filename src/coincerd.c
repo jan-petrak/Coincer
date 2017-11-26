@@ -17,7 +17,9 @@
  */
 
 #include <event2/event.h>
+#include <event2/listener.h>
 
+#include "neighbours.h"
 #include "p2p.h"
 
 int main(void)
@@ -40,14 +42,24 @@ int main(void)
 	 * - terminate on SIGTERM
 	 */
 
-	struct event_base *event_loop;
+	struct evconnlistener *listener;
+	struct Loop_Data loop_data;
 
+	/* To store the return values of setup functions */
 	int ret;
-	if ((ret = listen_init(&event_loop))) {
+
+	loop_data.event_loop = NULL;
+	neighbours_init(&loop_data.neighbours);
+
+	if ((ret = listen_init(&listener, &loop_data)) != 0) {
 		return ret;
 	}
 
-	event_base_dispatch(event_loop);
+	event_base_dispatch(loop_data.event_loop);
+
+	event_base_free(loop_data.event_loop);
+	evconnlistener_free(listener);
+	clear_neighbours(&loop_data.neighbours);
 
 	return 0;
 }

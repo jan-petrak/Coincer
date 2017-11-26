@@ -21,8 +21,29 @@
 
 #include <event2/event.h>
 
-#define	DEFAULT_PORT	31070
+#include "neighbours.h"
 
-int listen_init(struct event_base **base);
+#define	DEFAULT_PORT	31070
+/* after (READ/WRITE)_TIMEOUT seconds invoke timeout callback */
+#define READ_TIMEOUT 	30
+#define WRITE_TIMEOUT 	30
+
+/* event loop will work with the data stored in an instance of this struct */
+struct Loop_Data {
+	struct event_base *event_loop;
+	struct Neighbours neighbours;
+};
+
+/**
+ * @brief Initialize listening and set up callbacks
+ *
+ * @param	listener	The even loop listener
+ * @param	loop_data	Data for the event loop to work with
+ *
+ * @return	1 if an error occured
+ * @return	0 if successfully initialized
+ */
+int listen_init(struct evconnlistener 	**listener,
+		struct Loop_Data 	*loop_data);
 
 #endif /* P2P_H */
