@@ -33,17 +33,17 @@
  *
  * @brief Callback for reading an input buffer
  * @param	bev	buffer to read data from
- * @param	ctx	struct Loop_Data *
+ * @param	ctx	struct s_global_state *
  */
 static void p2p_process(struct bufferevent *bev, void *ctx)
 {
 	/* Using this we can know who's sent us the message and
 	   reset their amount of failed pings */
-	struct Loop_Data *loop_data = (struct Loop_Data *) ctx;
+	struct s_global_state *global_state = (struct s_global_state *) ctx;
 
 	/* Find the neighbour based on their buffer event */
 	struct Neighbour *neighbour =
-		find_neighbour(&loop_data->neighbours, bev);
+		find_neighbour(&global_state->neighbours, bev);
 
 	/* Read from input buffer, write to output buffer */
 	struct evbuffer *input = bufferevent_get_input(bev);
@@ -51,7 +51,7 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 
 	size_t len = evbuffer_get_length(input);
 	char *data = (char *) malloc(len * (sizeof(char) + 1));
-	
+
 	/* FOR TESTING PURPOSES */
 
 	/* Drain input buffer into data */
@@ -80,7 +80,6 @@ static void timeout_process(struct Neighbours *neighbours,
 			    struct Neighbour *neighbour)
 {
 	if (neighbour->failed_pings < 3) {
-
 		/* bufferevent was disabled when timeout flag was set */
 		bufferevent_enable(neighbour->buffer_event,
 			EV_READ | EV_WRITE | EV_TIMEOUT);
@@ -105,13 +104,13 @@ static void timeout_process(struct Neighbours *neighbours,
  * @brief Callback for bufferevent event detection
  * @param	bev	bufferevent on which the event occured
  * @param	events	flags of the events occured
- * @param	ctx	struct Loop_Data *
+ * @param	ctx	struct s_global_state *
  */
 static void event_cb(struct bufferevent *bev, short events, void *ctx)
 {
-	struct Loop_Data *loop_data = (struct Loop_Data *) ctx;
+	struct s_global_state *global_state = (struct s_global_state *) ctx;
 	struct Neighbour *neighbour =
-		find_neighbour(&loop_data->neighbours, bev);
+		find_neighbour(&global_state->neighbours, bev);
 
 	if (neighbour == NULL) {
 		return;
@@ -120,15 +119,15 @@ static void event_cb(struct bufferevent *bev, short events, void *ctx)
 	if (events & BEV_EVENT_ERROR) {
 		perror("Error from bufferevent");
 		printf("Removing %s from neighbours.\n", neighbour->ip_addr);
-		delete_neighbour(&loop_data->neighbours, bev);
+		delete_neighbour(&global_state->neighbours, bev);
 	}
 	if (events & (BEV_EVENT_EOF)) {
 		printf("%s has disconnected.\n", neighbour->ip_addr);
-		delete_neighbour(&loop_data->neighbours, bev);
+		delete_neighbour(&global_state->neighbours, bev);
 	}
 	if (events & BEV_EVENT_TIMEOUT) {
 		/* Bufferevent bev received timout event */
-		timeout_process(&loop_data->neighbours, neighbour);
+		timeout_process(&global_state->neighbours, neighbour);
 	}
 }
 
@@ -152,26 +151,28 @@ static void ip_to_string(struct sockaddr *addr, char *ip)
  * @param	fd		file descriptor for the new connection
  * @param	address		routing information
  * @param	socklen		size of address
- * @param	ctx		struct Loop_Data *
+ * @param	ctx		struct s_global_state *
  */
 static void accept_connection(struct evconnlistener *listener,
 			      evutil_socket_t fd, struct sockaddr *addr,
 			      int socklen __attribute__((unused)),
 			      void *ctx)
 {
-	/* We need to add the new connection to the list
-	   of our neighbours */
-	struct Loop_Data *loop_data = (struct Loop_Data *) ctx;
+	/* We need to add the new connection to the list of our neighbours */
+	struct s_global_state *global_state = (struct s_global_state *) ctx;
 	struct timeval write_timeout;
 	struct timeval read_timeout;
 
 	/* To display IP address of the other peer */
 	char ip[INET6_ADDRSTRLEN];
 
-	/* Set up a bufferevent for a new connection */
-	struct event_base *base = evconnlistener_get_base(listener);
-	struct bufferevent *bev =
-		bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+	/* Bufferevent for a new connection */
+	struct event_base *base;
+	struct bufferevent *bev;
+
+	/* Set up the bufferevent for a new connection */
+	base = evconnlistener_get_base(listener);
+	bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
 
 	struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *) addr;
 
@@ -192,7 +193,7 @@ static void accept_connection(struct evconnlistener *listener,
 	ip_to_string(addr, ip);
 
 	/* Add the new connection to the list of our neighbours */
-	if (!add_new_neighbour(&loop_data->neighbours, ip, bev)) {
+	if (!add_new_neighbour(&global_state->neighbours, ip, bev)) {
 		bufferevent_free(bev);
 		return;
 	}
@@ -203,34 +204,34 @@ static void accept_connection(struct evconnlistener *listener,
 /**
  * @brief Callback for listener error detection
  * @param	listener	listener on which the error occured
- * @param	ctx		struct Loop_Data *
+ * @param	ctx		struct s_global_state *
  */
 static void accept_error_cb(struct evconnlistener *listener,
 			    void *ctx)
 {
 	struct event_base *base = evconnlistener_get_base(listener);
-	struct Loop_Data *loop_data = (struct Loop_Data *) ctx;
+	struct s_global_state *global_state = (struct s_global_state *) ctx;
 	int err = EVUTIL_SOCKET_ERROR();
 	fprintf(stderr, "Got an error %d (%s) on the listener. "
 		"Shutting down.\n", err, evutil_socket_error_to_string(err));
 
 	event_base_loopexit(base, NULL);
-	clear_neighbours(&loop_data->neighbours);
+	clear_neighbours(&global_state->neighbours);
 }
 
 /**
  * @brief Initialize listening and set up callbacks
  *
  * @param	listener	The even loop listener
- * @param	loop_data	Data for the event loop to work with
+ * @param	global_state	Data for the event loop to work with
  *
  * @return	1 if an error occured
  * @return	0 if successfully initialized
  */
 int listen_init(struct evconnlistener 	**listener,
-		struct Loop_Data 	*loop_data)
+		struct s_global_state 	*global_state)
 {
-	struct event_base **base = &loop_data->event_loop;
+	struct event_base **base = &global_state->event_loop;
 	struct sockaddr_in6 sock_addr;
 
 	int port = DEFAULT_PORT;
@@ -247,7 +248,7 @@ int listen_init(struct evconnlistener 	**listener,
 	sock_addr.sin6_addr = in6addr_any;
 	sock_addr.sin6_port = htons(port);
 
-	*listener = evconnlistener_new_bind(*base, accept_connection, loop_data,
+	*listener = evconnlistener_new_bind(*base, accept_connection, global_state,
 					   LEV_OPT_CLOSE_ON_FREE |
 					   LEV_OPT_REUSEABLE, -1,
 					   (struct sockaddr *) &sock_addr,
@@ -259,6 +260,6 @@ int listen_init(struct evconnlistener 	**listener,
 	}
 
 	evconnlistener_set_error_cb(*listener, accept_error_cb);
-	
+
 	return 0;
 }

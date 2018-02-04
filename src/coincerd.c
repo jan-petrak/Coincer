@@ -43,23 +43,20 @@ int main(void)
 	 */
 
 	struct evconnlistener *listener;
-	struct Loop_Data loop_data;
+	struct s_global_state  global_state;
 
-	/* To store the return values of setup functions */
-	int ret;
+	global_state.event_loop = NULL;
+	neighbours_init(&global_state.neighbours);
 
-	loop_data.event_loop = NULL;
-	neighbours_init(&loop_data.neighbours);
-
-	if ((ret = listen_init(&listener, &loop_data)) != 0) {
-		return ret;
+	if (listen_init(&listener, &global_state) != 0) {
+		return 1;
 	}
 
-	event_base_dispatch(loop_data.event_loop);
+	event_base_dispatch(global_state.event_loop);
 
-	event_base_free(loop_data.event_loop);
+	event_base_free(global_state.event_loop);
 	evconnlistener_free(listener);
-	clear_neighbours(&loop_data.neighbours);
+	clear_neighbours(&global_state.neighbours);
 
 	return 0;
 }

@@ -29,21 +29,21 @@
 #define WRITE_TIMEOUT 	30
 
 /* event loop will work with the data stored in an instance of this struct */
-struct Loop_Data {
+struct s_global_state {
 	struct event_base *event_loop;
-	struct Neighbours neighbours;
+	struct s_neighbours neighbours;
 };
 
 /**
  * @brief Initialize listening and set up callbacks
  *
  * @param	listener	The even loop listener
- * @param	loop_data	Data for the event loop to work with
+ * @param	global_state	Data for the event loop to work with
  *
- * @return	1 if an error occured
  * @return	0 if successfully initialized
+ * @return	1 if an error occured
  */
-int listen_init(struct evconnlistener 	**listener,
-		struct Loop_Data 	*loop_data);
+int listen_init(struct evconnlistener **listener,
+		struct s_global_state *global_state);
 
 #endif /* P2P_H */

@@ -1,4 +1,21 @@
-#include <assert.h>
+/*
+ *  Coincer
+ *  Copyright (C) 2017-2018  Coincer Developers
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <event2/bufferevent.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,17 +23,16 @@
 
 #include "neighbours.h"
 
-void neighbours_init(struct Neighbours *neighbours)
+void neighbours_init(struct s_neighbours *neighbours)
 {
 	neighbours->first = neighbours->last = NULL;
 	neighbours->size  = 0;
 }
 
-struct Neighbour *find_neighbour(const struct Neighbours 	*neighbours,
-				 const struct bufferevent 	*bev)
+struct s_neighbour *find_neighbour(const struct s_neighbours *neighbours,
+				   const struct bufferevent  *bev)
 {
-
-	struct Neighbour *current = neighbours->first;
+	struct s_neighbour *current = neighbours->first;
 
 	while (current != NULL) {
 		if (current->buffer_event == bev) {
@@ -28,10 +44,10 @@ struct Neighbour *find_neighbour(const struct Neighbours 	*neighbours,
 	return NULL;
 }
 
-struct Neighbour *find_neighbour_by_ip(const struct Neighbours	*neighbours,
-				       const char 		*ip_addr)
+struct s_neighbour *find_neighbour_by_ip(const struct s_neighbours *neighbours,
+					 const char *ip_addr)
 {
-	struct Neighbour *current = neighbours->first;
+	struct s_neighbour *current = neighbours->first;
 
 	while (current != NULL) {
 		if (strcmp(current->ip_addr, ip_addr) == 0) {
@@ -41,28 +57,34 @@ struct Neighbour *find_neighbour_by_ip(const struct Neighbours	*neighbours,
 	}
 
 	return NULL;
-
 }
 
-struct Neighbour *add_new_neighbour(struct Neighbours 	*neighbours, 
-				    const char 		*ip_addr,
-				    struct bufferevent 	*bev)
+struct s_neighbour *add_new_neighbour(struct s_neighbours *neighbours,
+				      const char	  *ip_addr,
+				      struct bufferevent  *bev)
 {
-	struct Neighbour *new_neighbour = (struct Neighbour *)
-		malloc(sizeof(struct Neighbour));
+	struct s_neighbour *new_neighbour;
+	
+	new_neighbour = (struct s_neighbour *)
+				malloc(sizeof(struct s_neighbour));
+	if (new_neighbour == NULL) {
+		/* WIP */
+		perror("malloc for a new neighbour");
+                return NULL;
+	}
 
+	/* don't add duplicates */
 	if (find_neighbour_by_ip(neighbours, ip_addr)) {
 		return NULL;
 	}
 
-	assert(new_neighbour != NULL);
-
+	/* TODO: comment why it is safe to use strcpy */
 	strcpy(new_neighbour->ip_addr, ip_addr);
 	new_neighbour->failed_pings = 0;
 	new_neighbour->next = NULL;
 	new_neighbour->buffer_event = bev;
 
-
+	/* TODO: comment */
 	if (neighbours->last == NULL) {
 		neighbours->first = neighbours->last = new_neighbour;
 	} else {
@@ -75,10 +97,10 @@ struct Neighbour *add_new_neighbour(struct Neighbours 	*neighbours,
 	return new_neighbour;
 }
 
-void delete_neighbour(struct Neighbours *neighbours, struct bufferevent *bev)
+void delete_neighbour(struct s_neighbours *neighbours, struct bufferevent *bev)
 {
-	struct Neighbour *current = neighbours->first;
-	struct Neighbour *neighbour = find_neighbour(neighbours, bev);
+	struct s_neighbour *current   = neighbours->first;
+	struct s_neighbour *neighbour = find_neighbour(neighbours, bev);
 
 	if (current == NULL || neighbour == NULL) {
 		return;
@@ -89,7 +111,6 @@ void delete_neighbour(struct Neighbours *neighbours, struct bufferevent *bev)
 	}
 
 	if (neighbours->first == neighbour) {
-
 		if (neighbours->first == neighbours->last) {
 			neighbours->first = neighbours->last = NULL;
 		} else {
@@ -103,7 +124,6 @@ void delete_neighbour(struct Neighbours *neighbours, struct bufferevent *bev)
 
 	while (current != NULL) {
 		if (current->next == neighbour) {
-
 			current->next = neighbour->next;
 
 			if (current->next == NULL) {
@@ -118,13 +138,13 @@ void delete_neighbour(struct Neighbours *neighbours, struct bufferevent *bev)
 	}
 }
 
-void clear_neighbours(struct Neighbours *neighbours)
+void clear_neighbours(struct s_neighbours *neighbours)
 {
-	struct Neighbour *current = neighbours->first;
+	struct s_neighbour *current = neighbours->first;
 
 	while (current != NULL) {
 
-		struct Neighbour *temp = current;
+		struct s_neighbour *temp = current;
 		current = current->next;
 
 		if (temp->buffer_event != NULL) {
@@ -136,9 +156,3 @@ void clear_neighbours(struct Neighbours *neighbours)
 
 	neighbours_init(neighbours);
 }
-
-
-
-
-
-
