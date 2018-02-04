@@ -1,0 +1,34 @@
+- Makefile.am: podle abecedy
+- camel case se běžně prakticky nepoužívá – jen všechna malá nebo všechna velká písmena (konstanty/makra)
+- neighbours.h: k funkcím psát komentáře rovnou jako dokumentaci
+- využívat prázdné řádky ke zpřehledňování
+  (rozhodně nenechávat zbytečně na konci souboru nebo neúčelně na úplném začátku nebo konci bloku)
+- neighbour.c: alokaci paměti rozhodně nekontrolovat přes asserty – to je náchylné na DoS
+  - assert by měl sloužit jen ke kontrole nejzazší, že v programu není chyba, že skutečně správně kontroluje toky dat
+- pokud je to vzhlednější, není problém zarovnávat mezerami (parametry fcí ap.)
+- někde zarovnávat nemá ani smysl, takže tam to prostě nechat být
+- pozor na kombinaci „[mezera][TAB]“ – vyvarovat se jí
+- p2p.c: když hodíme zvlášť deklaraci a zvlášť inicializaci, kód se může hezky zpřehlednit (a méně lámat přes řádky)
+- ad doxygen: nechal bych to v .c – stejně tam už je dokumentace ke statickým funkcím, tak je hloupé tam najednou k některým funkcím dokumentaci nemít
+- úplně klidně prokládejte kód komentáři; je fajn, když člověk může prolétnout kód a očima se chytat jenom komentářů
+- pěstujme konzistenci :c)
+
+* záměr
+- zkusit pro LL použít generickou strukturu → méně specifického kódu, méně potenciálních chyb :c)
+  (kód jsem převzal odjinud, není zaintegrovaný, bude možná chtít lehce pročistit)
+  - tím pádem nebude třeba struktura s_neighbours a údaj o počtu sousedů se přesune jinam (patrně do s_global_state)
+- (já) méně zdržovat vývoj. :c) dost jsem nad tím přemýšlel, došel jsem k následujícímu návrhu:
+  dělat menší commity, soustředit se na nějakou jednu záležitost, tu implementovat (upravit/…) a poslat do společného repozitáře formou merge requestu (a než se začlení, tak člověk může v další větvi už řešit něco jiného) – tam to můžeme společně prohlédnout, případně okomentovat, prodiskutovat a začlenit. to, co probíhá teď, už nechci ze své strany opakovat, přijde mi to toxické a neproduktivní
+  [celkově potřebujeme vývoj stabilizovat do nějakého udržitelného workflow – kód začíná mít celkem formu, takže bych to viděl, že teď je docela správný okamžik to zkusit]
+  [také komunikace by na IRC mohla být živější – cokoli nejasného se tam dá vznést; mnohdy je to užitečné ne ani nutně k získání odpovědi od ostatních, ale ujasnění si vlastních myšlenek (často si nakonec člověk odpoví sám); také to podporuje vzájemnou koordinaci, kdy ostatní ví, kdo na čem dělá]
+
+* poznámky
+- u IP adresy by bylo fajn ji mít jako binární 16B položku (→ např. memcmp místo strcmp) – dává to v aplikaci smysl?
+- v coincerd.c jsem vyhodil `return ret;` – návratové hodnoty funkcí jsou typicky jiné než návratové hodnoty programu jako takového
+- doxygen: u návratových hodnot prvně zdokumentovat úspěch(y), teprve pak chybové stavy
+- když komentáře začínají velkým písmenem, očekávám osobně větu (= končící tečkou). osobně tedy víc píšu komentáře s počátečním malým písmenem, pokud nejde o několik vět (pak je to typicky na více řádků a komentář celkově vypadá docela jinak). ale to je spíš moje osobní preference, nicméně měli bychom si říct, jak komentovat a být konzistentní
+- můj commit rozhodně neukazuje ideální/finální podobu, spíš jsem se snažil naznačit cestu
+
+* todo
+- neighbours.h → přesunout komentáře k funkcím do .c
+- zrealizovat záměr ↑
