@@ -21,52 +21,106 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "linkedlist.h"
 #include "neighbours.h"
 
-void neighbours_init(struct s_neighbours *neighbours)
+/**
+ * Initialize the linked list of neighbours to default values.
+ *
+ * @param	neighbours	Linked list to be initialized.
+ */
+void neighbours_init(linkedlist_t *neighbours)
 {
-	neighbours->first = neighbours->last = NULL;
-	neighbours->size  = 0;
+	linkedlist_init(neighbours);
 }
 
-struct s_neighbour *find_neighbour(const struct s_neighbours *neighbours,
-				   const struct bufferevent  *bev)
+/** 
+ * Find neighbour in neighbours based on their bufferevent.
+ *
+ * @param 	neighbours	Linked list of our neighbours.
+ * @param	bev		Neighbour's bufferevent.
+ *
+ * @return 	Desired neighbour.
+ * @return 	NULL if not found.
+ */
+neighbour_t *find_neighbour(const linkedlist_t		*neighbours,
+                            const struct bufferevent	*bev)
 {
-	struct s_neighbour *current = neighbours->first;
+	/* start the search from the first linked list node */
+	const linkedlist_node_t *current = linkedlist_get_first(neighbours);
 
 	while (current != NULL) {
-		if (current->buffer_event == bev) {
-			return current;
+
+		/* data of the 'current' node; struct s_neighbour */
+		neighbour_t *current_data = (neighbour_t *) current->data;
+
+		/* bufferevents equal => neighbour found */
+		if (current_data->buffer_event == bev) {
+
+			/* return node's data; struct s_neighbour */
+			return current_data;
 		}
-		current = current->next;
+
+		/* get next node in the linked list */
+		current = linkedlist_get_next(neighbours, current);
 	}
 
 	return NULL;
 }
 
-struct s_neighbour *find_neighbour_by_ip(const struct s_neighbours *neighbours,
-					 const char *ip_addr)
+/** 
+ * Find neighbour in neighbours based on their ip_addr.
+ *
+ * @param 	neighbours	Linked list of our neighbours.
+ * @param	ip_addr		Binary ip address stored in 16 bytes.
+ *
+ * @return	Desired neighbour.
+ * @return	NULL if not found.
+ */
+neighbour_t *find_neighbour_by_ip(const linkedlist_t	*neighbours,
+                                  const unsigned char	*ip_addr)
 {
-	struct s_neighbour *current = neighbours->first;
+	/* start the search from the first linked list node */
+	const linkedlist_node_t *current = linkedlist_get_first(neighbours);
 
 	while (current != NULL) {
-		if (strcmp(current->ip_addr, ip_addr) == 0) {
-			return current;
+
+		/* data of the 'current' node; struct s_neighbour */
+		neighbour_t *current_data = (neighbour_t *) current->data;
+
+		/* ip addresses match => neighbour found */
+		if (memcmp(current_data->ip_addr, ip_addr, 16) == 0) {
+
+			/* return node's data; struct s_neighbour */
+			return current_data;
 		}
-		current = current->next;
+
+		/* get next node in the linked list */
+		current = linkedlist_get_next(neighbours, current);
 	}
 
 	return NULL;
 }
 
-struct s_neighbour *add_new_neighbour(struct s_neighbours *neighbours,
-				      const char	  *ip_addr,
-				      struct bufferevent  *bev)
+/** 
+ * Add new neighbour into neighbours.
+ *
+ * @param 	neighbours	Linked list of our neighbours.
+ * @param	ip_addr		Binary ip address stored in 16 bytes.
+ * @param	bev		Neighbour's bufferevent.
+ *
+ * @return	Newly added neighbour.
+ * @return	NULL if neighbour already exists or allocation failure occured.
+ */
+neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
+			       const unsigned char	*ip_addr,
+			       struct bufferevent	*bev)
 {
-	struct s_neighbour *new_neighbour;
-	
-	new_neighbour = (struct s_neighbour *)
-				malloc(sizeof(struct s_neighbour));
+	/* create new neighbour */
+	neighbour_t *new_neighbour;
+	new_neighbour = (neighbour_t *) malloc(sizeof(neighbour_t));
+
+	/* allocation failure */
 	if (new_neighbour == NULL) {
 		/* WIP */
 		perror("malloc for a new neighbour");
@@ -78,81 +132,86 @@ struct s_neighbour *add_new_neighbour(struct s_neighbours *neighbours,
 		return NULL;
 	}
 
-	/* TODO: comment why it is safe to use strcpy */
-	strcpy(new_neighbour->ip_addr, ip_addr);
+	/* initialize new neighbour */
+	memcpy(new_neighbour->ip_addr, ip_addr, 16);
 	new_neighbour->failed_pings = 0;
-	new_neighbour->next = NULL;
 	new_neighbour->buffer_event = bev;
 
-	/* TODO: comment */
-	if (neighbours->last == NULL) {
-		neighbours->first = neighbours->last = new_neighbour;
-	} else {
-		neighbours->last->next = new_neighbour;
-		neighbours->last = new_neighbour;
+	/* add new neighbour into linked list; NULL if allocation failed */
+	if (linkedlist_append(neighbours, new_neighbour) == NULL) {
+		/* WIP */
+		perror("malloc for a new neighbour of linkedlist node");
+		return NULL;
 	}
-
-	neighbours->size += 1;
 
 	return new_neighbour;
 }
 
-void delete_neighbour(struct s_neighbours *neighbours, struct bufferevent *bev)
+/**
+ * Delete neighbour from neighbours.
+ *
+ * @param	neighbours	Linked list of our neighbours.
+ * @param	bev		Neighbour's bufferevent.
+ */
+void delete_neighbour(linkedlist_t *neighbours, struct bufferevent *bev)
 {
-	struct s_neighbour *current   = neighbours->first;
-	struct s_neighbour *neighbour = find_neighbour(neighbours, bev);
+	neighbour_t		*neighbour;
+	linkedlist_node_t	*neighbour_node;
 
-	if (current == NULL || neighbour == NULL) {
+	neighbour = find_neighbour(neighbours, bev);
+
+	/* no neighbour with bufferevent 'bev' => nothing to delete */
+	if (neighbour == NULL) {
 		return;
 	}
 
-	if (neighbour->buffer_event != NULL) {
-		bufferevent_free(bev);
-	}
+	neighbour_node = linkedlist_find(neighbours, neighbour);
 
-	if (neighbours->first == neighbour) {
-		if (neighbours->first == neighbours->last) {
-			neighbours->first = neighbours->last = NULL;
-		} else {
-			neighbours->first = neighbours->first->next;
-		}
-
-		free(neighbour);
-		neighbours->size = 0;
+	/* since neighbour was found, neighbour_node should never be NULL */
+	if (neighbour_node == NULL) {
+		/* WIP */
+		perror("delete_neighbour");
 		return;
 	}
 
-	while (current != NULL) {
-		if (current->next == neighbour) {
-			current->next = neighbour->next;
+	/* free neighbour's bufferevent */
+	bufferevent_free(bev);
 
-			if (current->next == NULL) {
-				neighbours->last = current;
-			}
+	/* free the linked list node's data; neighbour_t * */
+	free(neighbour_node->data);
 
-			free(neighbour);
-			neighbours->size -= 1;
-			break;
-		}
-		current = current->next;
-	}
+	/* delete the neighbour from the linked list */
+	linkedlist_delete(neighbours, neighbour_node);
 }
 
-void clear_neighbours(struct s_neighbours *neighbours)
+/**
+ * Delete all neighbours.
+ *
+ * @param	neighbours	Linked list of our neighbours.
+ */
+void clear_neighbours(linkedlist_t *neighbours)
 {
-	struct s_neighbour *current = neighbours->first;
+	linkedlist_node_t *current_node = linkedlist_get_first(neighbours);
 
-	while (current != NULL) {
+	/* safely delete data from the linked list nodes */
+	while (current_node != NULL) {
 
-		struct s_neighbour *temp = current;
-		current = current->next;
+		neighbour_t *current;
 
-		if (temp->buffer_event != NULL) {
-			bufferevent_free(temp->buffer_event);
-		}
+		/* load current node's data into 'current' */
+		current = (neighbour_t *) current_node->data;
 
-		free(temp);
+		/* deallocate neighbour's bufferevent */
+		bufferevent_free(current->buffer_event);
+
+		/* deallocate data */
+		free(current_node->data);
+		current_node->data = NULL;
+
+		/* get next node in the linked list */
+		current_node = linkedlist_get_next(neighbours, current_node);
 	}
 
-	neighbours_init(neighbours);
+	/* safely delete all nodes in the linked list */
+	linkedlist_destroy(neighbours);
 }

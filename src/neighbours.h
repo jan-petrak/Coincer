@@ -22,55 +22,35 @@
 #include <event2/bufferevent.h>
 #include <stddef.h>
 
-/** data type for the linked list of neighbours */
-struct s_neighbour {
-	/** neighbours's IPv6 address;
-	 *  also allows storing IPv4-mapped IPv6 addresses */
-	char ip_addr[46];
+#include "linkedlist.h"
 
-	/** bufferevent belonging to this neighbour */
+/** Data type for the linked list of neighbours. */
+typedef struct s_neighbour {
+	/**< Neighbours's IPv6 address;
+	 *  also allows storing IPv4-mapped IPv6 addresses. */
+	unsigned char ip_addr[16];
+
+	/**< Bufferevent belonging to this neighbour. */
 	struct bufferevent *buffer_event;
 
-	/** number of failed ping attempts -- max 3, then disconnect */
+	/**< Number of failed ping attempts -- max 3, then disconnect. */
 	size_t failed_pings;
+} neighbour_t;
 
-	/** next neighbour in the linked list (struct s_neighbours) */
-	struct s_neighbour *next;
-};
+void neighbours_init(linkedlist_t *neighbours);
 
-/** linked list of neighbours */
-struct s_neighbours {
-	/** number of neighbours we are connected to */
-	size_t size;
+neighbour_t *find_neighbour(const linkedlist_t *neighbours,
+			    const struct bufferevent  *bev);
 
-	struct s_neighbour *first;
-	struct s_neighbour *last;
-};
+neighbour_t *find_neighbour_by_ip(const linkedlist_t 	*neighbours,
+				  const unsigned char	*ip_addr);
 
-/** set linked list variables to their default values */
-void neighbours_init(struct s_neighbours *neighbours);
+neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
+			       const unsigned char	*ip_addr,
+			       struct bufferevent  	*bev);
 
-/** find neighbour in neighbours based on their buffer_event,
-    returns NULL if not found */
-struct s_neighbour *find_neighbour(const struct s_neighbours *neighbours,
-				   const struct bufferevent  *bev);
+void delete_neighbour(linkedlist_t *neighbours, struct bufferevent *bev);
 
-/** find neighbour in neighbours based on their ip_addr,
-    returns NULL if not found */
-struct s_neighbour *find_neighbour_by_ip(const struct s_neighbours *neighbours,
-					 const char *ip_addr);
-
-/** add new neighbour into neighbours
-    returns NULL if neighbour already exists */
-struct s_neighbour *add_new_neighbour(struct s_neighbours *neighbours,
-				      const char	  *ip_addr,
-				      struct bufferevent  *bev);
-
-/* delete neighbour from neighbours */
-void delete_neighbour(struct s_neighbours *neighbours,
-		      struct bufferevent  *bev);
-
-/* delete all neighbours */
-void clear_neighbours(struct s_neighbours *neighbours);
+void clear_neighbours(linkedlist_t *neighbours);
 
 #endif /* NEIGHBOURS_H */
