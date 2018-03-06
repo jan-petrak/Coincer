@@ -19,22 +19,38 @@
 #ifndef LINKEDLIST_H
 #define LINKEDLIST_H
 
-/* Linked list node structure */
+/**
+ * Node of the linked list structure.
+ */
 typedef struct s_linkedlist_node {
-	struct s_linkedlist_node	*prev;
-	struct s_linkedlist_node	*next;
-	void				*data;
+	struct s_linkedlist_node	*prev; /**< Previous node. */
+	struct s_linkedlist_node	*next; /**< Next node. */
+	void				*data; /**< Data of the node. */
 } linkedlist_node_t;
 
-/* Linked list root structure */
+/**
+ * Linked list root structure.
+ */
 typedef struct s_linkedlist {
-	linkedlist_node_t	first;
-	linkedlist_node_t	last;
+	struct s_linkedlist_node	first; /**< Auxiliary first node. */
+	struct s_linkedlist_node	last; /**< Auxiliary last node. */
 } linkedlist_t;
 
-linkedlist_t *linkedlist_create(void);
+void linkedlist_init(linkedlist_t *root);
+
+linkedlist_node_t *linkedlist_get_first(const linkedlist_t *root);
+
+linkedlist_node_t *linkedlist_get_last(const linkedlist_t *root);
+
+linkedlist_node_t *linkedlist_get_next(const linkedlist_t	*root,
+				       const linkedlist_node_t	*node);
+
 void linkedlist_destroy(linkedlist_t *root);
+
 linkedlist_node_t *linkedlist_append(linkedlist_t *root, void *data);
+
 void linkedlist_delete(linkedlist_t *root, linkedlist_node_t *node);
+
+linkedlist_node_t *linkedlist_find(const linkedlist_t *root, const void *data);
 
 #endif /* LINKEDLIST_H */

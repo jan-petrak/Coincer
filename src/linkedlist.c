@@ -16,37 +16,84 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "linkedlist.h"
-#include "log.h"
 
 /**
- * Creates root of a linked list.
+ * Initializes linked list to default values.
  *
- * @return	Root of new linked list
+ * @param	root	Linked list to initialize.
  */
-linkedlist_t *linkedlist_create(void)
+void linkedlist_init(linkedlist_t *root)
 {
-	linkedlist_t *linkedlist;
+	root->first.prev = NULL;
+	root->first.next = &root->last;
+	root->last.prev  = &root->first;
+	root->last.next  = NULL;
 
-	if ((linkedlist = (linkedlist_t *) malloc(sizeof(linkedlist_t))) ==
-	    NULL) {
-		log_error("Lack of free memory");
+	root->first.data	= NULL;
+	root->last.data		= NULL;
+}
+
+/**
+ * Get first node of the linked list.
+ *
+ * @param	root	Root of the linked list.
+ *
+ * @return	First node of the linked list.
+ * @return	NULL if linkedlist is empty.
+ */
+linkedlist_node_t *linkedlist_get_first(const linkedlist_t *root)
+{
+	if (root->first.next == &root->last) {
 		return NULL;
 	}
-	linkedlist->first.prev = NULL;
-	linkedlist->first.next = &linkedlist->last;
-	linkedlist->last.prev  = &linkedlist->first;
-	linkedlist->last.next  = NULL;
 
-	return linkedlist;
+	return root->first.next;
+}
+
+/**
+ * Get last node of the linkedlist.
+ *
+ * @param	root	Root of the linked list.
+ *
+ * @return	Last node of the linked list.
+ * @return	NULL if linkedlist is empty.
+ */
+linkedlist_node_t *linkedlist_get_last(const linkedlist_t *root)
+{
+	if (root->last.prev == &root->first) {
+		return NULL;
+	}
+
+	return root->last.prev;
+}
+
+/**
+ * Get node that is right after 'node' in the linked list.
+ *
+ * @param	root	Root of the linked list.
+ * @param	node	We want node that is right after this node.
+ *
+ * @return	The node we requested.
+ * @return	NULL if 'node' was last in the linked list or NULL.
+ */
+linkedlist_node_t *linkedlist_get_next(const linkedlist_t	*root,
+				       const linkedlist_node_t	*node)
+{
+	if (node == NULL || node->next == &root->last) {
+		return NULL;
+	}
+
+	return node->next;
 }
 
 /**
  * Destroys a linked list.
  *
- * @param	root	Root of the linked list to destroy
+ * @param	root	Root of the linked list to destroy.
  */
 void linkedlist_destroy(linkedlist_t *root)
 {
@@ -62,11 +109,11 @@ void linkedlist_destroy(linkedlist_t *root)
 /**
  * Append new node at the end of the linked list.
  *
- * @param	root	Root of the linked list
- * @param	data	Data to append to the list
+ * @param	root	Root of the linked list.
+ * @param	data	Data to append to the list.
  *
- * @return	pointer to created node if succeeded
- * @return	NULL if failed
+ * @return	Pointer to created node if succeeded.
+ * @return	NULL if failed.
  */
 linkedlist_node_t *linkedlist_append(linkedlist_t *root, void *data)
 {
@@ -74,7 +121,7 @@ linkedlist_node_t *linkedlist_append(linkedlist_t *root, void *data)
 
 	if ((node = (linkedlist_node_t *) malloc(sizeof(linkedlist_node_t))) ==
 	    NULL) {
-		log_error("Lack of free memory");
+		perror("linkedlist_append malloc");
 		return NULL;
 	}
 
@@ -89,16 +136,65 @@ linkedlist_node_t *linkedlist_append(linkedlist_t *root, void *data)
 }
 
 /**
- * Delete node from beginning of linked list.
+ * Delete node from the linked list.
  *
- * @param	root	Root of the linked list
- * @param	node	Node to delete from the list
+ * @param	root	Root of the linked list.
+ * @param	node	Node to be deleted from the linked list.
  */
 void linkedlist_delete(linkedlist_t *root, linkedlist_node_t *node)
 {
-	root->first.next = node->next;
-	node->next->prev = node->prev;
+	/* start the search from the first node of the linked list */
+	linkedlist_node_t *current = linkedlist_get_first(root);
 
-	free(node);
-	node = NULL;
+	while (current != NULL) {
+
+		/* node found */
+		if (current == node) {
+
+			/* fix the links of neighbour nodes */
+			node->prev->next = node->next;
+			node->next->prev = node->prev;
+
+			/* node deletion part */
+			free(node);
+			node = NULL;
+
+			/* no need to continue */
+			return;
+		}
+
+		/* go to next node and continue the search */
+		current = linkedlist_get_next(root, current);
+	}
+}
+
+/**
+ * Find node in the linked list by data.
+ *
+ * @param	root	Root of the linked list.
+ * @param	data	Data of the requested node.
+ *
+ * @return	Node containing 'data'.
+ * @return	NULL if the node doesn't exist.
+ */
+linkedlist_node_t *linkedlist_find(const linkedlist_t *root, const void *data)
+{
+	/* start the search from the first node of the linked list */
+	linkedlist_node_t *current = linkedlist_get_first(root);
+
+	while (current != NULL) {
+
+		/* node found */
+		if (current->data == data) {
+
+			/* return the node containing 'data' */
+			return current;
+		}
+
+		/* move to the next node and continue with the search */
+		current = linkedlist_get_next(root, current);
+	}
+
+	/* node not found */
+	return NULL;
 }
