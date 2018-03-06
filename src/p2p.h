@@ -21,28 +21,21 @@
 
 #include <event2/event.h>
 
-#include "neighbours.h"
+#include "linkedlist.h"
 
 #define	DEFAULT_PORT	31070
 /* after (READ/WRITE)_TIMEOUT seconds invoke timeout callback */
 #define READ_TIMEOUT 	30
 #define WRITE_TIMEOUT 	30
 
-/* event loop will work with the data stored in an instance of this struct */
-struct s_global_state {
-	struct event_base *event_loop;
-	struct s_neighbours neighbours;
-};
-
 /**
- * @brief Initialize listening and set up callbacks
- *
- * @param	listener	The even loop listener
- * @param	global_state	Data for the event loop to work with
- *
- * @return	0 if successfully initialized
- * @return	1 if an error occured
+ * Event loop works with the data stored in an instance of this struct.
  */
+typedef struct s_global_state {
+	struct event_base *event_loop; /**< For holding and polling events. */
+	linkedlist_t neighbours; /**< Linked list of our neighbours. */
+} global_state_t;
+
 int listen_init(struct evconnlistener **listener,
 		struct s_global_state *global_state);
 
