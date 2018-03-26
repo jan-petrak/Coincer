@@ -50,13 +50,11 @@ neighbour_t *find_neighbour(const linkedlist_t		*neighbours,
 	const linkedlist_node_t *current = linkedlist_get_first(neighbours);
 
 	while (current != NULL) {
-
 		/* data of the 'current' node; struct s_neighbour */
 		neighbour_t *current_data = (neighbour_t *) current->data;
 
 		/* bufferevents equal => neighbour found */
 		if (current_data->buffer_event == bev) {
-
 			/* return node's data; struct s_neighbour */
 			return current_data;
 		}
@@ -65,6 +63,7 @@ neighbour_t *find_neighbour(const linkedlist_t		*neighbours,
 		current = linkedlist_get_next(neighbours, current);
 	}
 
+	/* neighbour not found */
 	return NULL;
 }
 
@@ -84,13 +83,11 @@ neighbour_t *find_neighbour_by_ip(const linkedlist_t	*neighbours,
 	const linkedlist_node_t *current = linkedlist_get_first(neighbours);
 
 	while (current != NULL) {
-
 		/* data of the 'current' node; struct s_neighbour */
 		neighbour_t *current_data = (neighbour_t *) current->data;
 
 		/* ip addresses match => neighbour found */
 		if (memcmp(current_data->ip_addr, ip_addr, 16) == 0) {
-
 			/* return node's data; struct s_neighbour */
 			return current_data;
 		}
@@ -99,6 +96,7 @@ neighbour_t *find_neighbour_by_ip(const linkedlist_t	*neighbours,
 		current = linkedlist_get_next(neighbours, current);
 	}
 
+	/* neighbour not found */
 	return NULL;
 }
 
@@ -122,7 +120,7 @@ neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
 
 	/* allocation failure */
 	if (new_neighbour == NULL) {
-		/* WIP */
+		/* TODO: Allocation failure handling */
 		perror("malloc for a new neighbour");
                 return NULL;
 	}
@@ -139,7 +137,7 @@ neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
 
 	/* add new neighbour into linked list; NULL if allocation failed */
 	if (linkedlist_append(neighbours, new_neighbour) == NULL) {
-		/* WIP */
+		/* TODO: Allocation failure handling */
 		perror("malloc for a new neighbour of linkedlist node");
 		return NULL;
 	}
@@ -169,7 +167,7 @@ void delete_neighbour(linkedlist_t *neighbours, struct bufferevent *bev)
 
 	/* since neighbour was found, neighbour_node should never be NULL */
 	if (neighbour_node == NULL) {
-		/* WIP */
+		/* TODO: Error handling */
 		perror("delete_neighbour");
 		return;
 	}
@@ -195,7 +193,6 @@ void clear_neighbours(linkedlist_t *neighbours)
 
 	/* safely delete data from the linked list nodes */
 	while (current_node != NULL) {
-
 		neighbour_t *current;
 
 		/* load current node's data into 'current' */

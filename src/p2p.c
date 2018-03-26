@@ -114,7 +114,6 @@ static void timeout_process(linkedlist_t	*neighbours,
 
 	/* the neighbour hasn't failed enough pings to be deleted */
 	if (neighbour->failed_pings < 3) {
-
 		/* bufferevent was disabled when timeout flag was set */
 		bufferevent_enable(neighbour->buffer_event,
 			EV_READ | EV_WRITE | EV_TIMEOUT);
@@ -232,7 +231,6 @@ static void accept_connection(struct evconnlistener *listener,
 	if (!add_new_neighbour(&global_state->neighbours,
 			       inet6_ip,
 			       bev)) {
-
 		/* free the bufferevent if adding failed */
 		bufferevent_free(bev);
 		return;
@@ -260,7 +258,7 @@ static void accept_error_cb(struct evconnlistener *listener,
 	fprintf(stderr, "Got an error %d (%s) on the listener. "
 		"Shutting down.\n", err, evutil_socket_error_to_string(err));
 
-	/* WIP */
+	/* TODO: Handling of error with listener */
 
 	/* stop the event loop */
 	event_base_loopexit(base, NULL);

@@ -143,29 +143,12 @@ linkedlist_node_t *linkedlist_append(linkedlist_t *root, void *data)
  */
 void linkedlist_delete(linkedlist_t *root, linkedlist_node_t *node)
 {
-	/* start the search from the first node of the linked list */
-	linkedlist_node_t *current = linkedlist_get_first(root);
+	/* fix the links of neighbour nodes */
+	node->prev->next = node->next;
+	node->next->prev = node->prev;
 
-	while (current != NULL) {
-
-		/* node found */
-		if (current == node) {
-
-			/* fix the links of neighbour nodes */
-			node->prev->next = node->next;
-			node->next->prev = node->prev;
-
-			/* node deletion part */
-			free(node);
-			node = NULL;
-
-			/* no need to continue */
-			return;
-		}
-
-		/* go to next node and continue the search */
-		current = linkedlist_get_next(root, current);
-	}
+	/* node deletion part */
+	free(node);
 }
 
 /**
@@ -183,10 +166,8 @@ linkedlist_node_t *linkedlist_find(const linkedlist_t *root, const void *data)
 	linkedlist_node_t *current = linkedlist_get_first(root);
 
 	while (current != NULL) {
-
 		/* node found */
 		if (current->data == data) {
-
 			/* return the node containing 'data' */
 			return current;
 		}
