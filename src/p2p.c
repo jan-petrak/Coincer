@@ -36,7 +36,7 @@
  * @param	binary_ip	Binary represented IP address.
  * @param	ip		Readable IP address.
  */
-static void ip_to_string(unsigned char *binary_ip, char *ip)
+static void ip_to_string(const unsigned char *binary_ip, char *ip)
 {
 	inet_ntop(AF_INET6, binary_ip, ip, INET6_ADDRSTRLEN);
 }
@@ -49,16 +49,18 @@ static void ip_to_string(unsigned char *binary_ip, char *ip)
  */
 static void p2p_process(struct bufferevent *bev, void *ctx)
 {
-	char 		*data;
 	global_state_t	*global_state;
 	struct evbuffer	*input;
 	size_t		len;
+	char		*message;
 	neighbour_t	*neighbour;
 	struct evbuffer	*output;
+	char		response[256]; /* TODO: adjust size */
+	char		text_ip[INET6_ADDRSTRLEN];
 
 	global_state = (global_state_t *) ctx;
 
-	/* find the neighbour based on their buffer event */
+	/* find the neighbour based on their bufferevent */
 	neighbour = find_neighbour(&global_state->neighbours, bev);
 
 	/* message from unknown neighbour; quit p2p_process */
@@ -73,29 +75,38 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 	input	= bufferevent_get_input(bev);
 	output	= bufferevent_get_output(bev);
 
-	/* get length of the input messaage */
+	/* get length of the input message */
 	len = evbuffer_get_length(input);
 
 	/* allocate memory for the input message including '\0' */
-	data = (char *) malloc((len + 1) * sizeof(char));
-
-	/* FOR TESTING PURPOSES */
+	message = (char *) malloc((len + 1) * sizeof(char));
 
 	/* drain input buffer into data; -1 if evbuffer_remove failed */
-	if (evbuffer_remove(input, data, len) == -1) {
-		free(data);
+	if (evbuffer_remove(input, message, len) == -1) {
+		free(message);
 		return;
 	} else {
-		data[len] = '\0';
-	}	
+		message[len] = '\0';
+	}
 
-	printf("Sending back: %s", data);
+	ip_to_string(neighbour->ip_addr, text_ip);
+	printf("Received: %s from %s\n", message, text_ip);
 
-	/* copy string data to the output buffer */
-	evbuffer_add_printf(output, "%s", data);
+	/* TODO: Replace with JSON messages */
+	if (strcmp(message, "ping") == 0) {
+		strcpy(response, "pong");
+	} else {
+		strcpy(response, "");
+	}
+
+	if (strcmp(response, "") != 0) {
+		printf("Responding with: %s\n", response);
+		/* copy response to the output buffer */
+		evbuffer_add_printf(output, "%s", response);
+	}
 
 	/* deallocate input message */
-	free(data);
+	free(message);
 }
 
 /**
@@ -163,17 +174,18 @@ static void event_cb(struct bufferevent *bev, short events, void *ctx)
 	ip_to_string(neighbour->ip_addr, text_ip);
 
 	if (events & BEV_EVENT_ERROR) {
-		perror("Error from bufferevent");
-		printf("%s was removed\n", text_ip);
+		printf("Connection error: removing %s\n", text_ip);
 		delete_neighbour(&global_state->neighbours, bev);
 		return;
+	}
+	if (events & (BEV_EVENT_CONNECTED)) {
+		printf("Successfully connected to %s\n", text_ip);
 	}
 	if (events & (BEV_EVENT_EOF)) {
 		printf("%s disconnected\n", text_ip);
 		delete_neighbour(&global_state->neighbours, bev);
 		return;
 	}
-
 	/* timeout flag on 'bev' */
 	if (events & BEV_EVENT_TIMEOUT) {
 		timeout_process(&global_state->neighbours, neighbour);
@@ -197,10 +209,9 @@ static void accept_connection(struct evconnlistener *listener,
 	
 	struct event_base	*base;
 	struct bufferevent	*bev;
-	unsigned char		inet6_ip[sizeof(struct in6_addr)];
-	struct timeval		read_timeout;
+	unsigned char		ip_addr[16];
 	char			text_ip[INET6_ADDRSTRLEN];
-	struct timeval		write_timeout;
+	struct timeval		timeout;
 
 	global_state_t *global_state = (struct s_global_state *) ctx;
 	struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *) addr;
@@ -211,26 +222,25 @@ static void accept_connection(struct evconnlistener *listener,
 	/* setup a bufferevent for the new connection */
 	bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
 
-	/* subscribe every received P2P message to be processed */
+	/* subscribe every received P2P message to be processed;
+	 * p2p_process for read callback, NULL for write callback
+	 */
 	bufferevent_setcb(bev, p2p_process, NULL, event_cb, ctx);
 
 	bufferevent_enable(bev, EV_READ | EV_WRITE | EV_TIMEOUT);
 
-	/* after READ_TIMEOUT or WRITE_TIMEOUT seconds invoke event_cb */
-	write_timeout.tv_sec = WRITE_TIMEOUT;
-	write_timeout.tv_usec = 0;
+	timeout.tv_sec = TIMEOUT_TIME;
+	timeout.tv_usec = 0;
 
-	read_timeout.tv_sec = READ_TIMEOUT;
-	read_timeout.tv_usec = 0;
-
-	bufferevent_set_timeouts(bev, &read_timeout, &write_timeout);
+	/* after TIMEOUT_TIME seconds invoke event_cb */
+	bufferevent_set_timeouts(bev, &timeout, NULL);
 
 	/* put binary representation of IP to inet6_ip */
-	memcpy(inet6_ip, addr_in6->sin6_addr.s6_addr, sizeof(struct in6_addr));
+	memcpy(ip_addr, addr_in6->sin6_addr.s6_addr, 16);
 
 	/* add the new connection to the list of our neighbours */
 	if (!add_new_neighbour(&global_state->neighbours,
-			       inet6_ip,
+			       ip_addr,
 			       bev)) {
 
 		/* free the bufferevent if adding failed */
@@ -238,7 +248,7 @@ static void accept_connection(struct evconnlistener *listener,
 		return;
 	}
 
-	ip_to_string(inet6_ip, text_ip);
+	ip_to_string(ip_addr, text_ip);
 
 	printf("New connection from [%s]:%d\n", text_ip,
 		ntohs(addr_in6->sin6_port));
@@ -268,6 +278,7 @@ static void accept_error_cb(struct evconnlistener *listener,
 	/* delete neighbours */
 	clear_neighbours(&global_state->neighbours);
 }
+
 /**
  * Initialize listening and set up callbacks.
  *
@@ -298,11 +309,11 @@ int listen_init(struct evconnlistener 	**listener,
 	sock_addr.sin6_port = htons(port);
 
 	*listener = evconnlistener_new_bind(*base, accept_connection,
-					   global_state,
-					   LEV_OPT_CLOSE_ON_FREE |
-					   LEV_OPT_REUSEABLE, -1,
-					   (struct sockaddr *) &sock_addr,
-					   sizeof(sock_addr));
+					    global_state,
+					    LEV_OPT_CLOSE_ON_FREE |
+					    LEV_OPT_REUSEABLE, -1,
+					    (struct sockaddr *) &sock_addr,
+					    sizeof(sock_addr));
 
 	if (!*listener) {
 		perror("Couldn't create listener: evconnlistener_new_bind");
@@ -310,6 +321,93 @@ int listen_init(struct evconnlistener 	**listener,
 	}
 
 	evconnlistener_set_error_cb(*listener, accept_error_cb);
+
+	return 0;
+}
+
+/**
+ * Attempt to connect to the particular peer.
+ *
+ * @param	global_state	Data for the event loop to work with.
+ * @param	ip_addr		Binary IP of a peer that we want to connect to.
+ *
+ * @return	neighbour_t *	Pointer to newly connected neighbour.
+ * @return	NULL		Connecting was unsuccessful.
+ */
+neighbour_t *connect_to_peer(global_state_t		*global_state,
+                             const unsigned char	*ip_addr)
+{
+	struct bufferevent	*bev;
+	struct sockaddr		*sock_addr;
+	struct sockaddr_in6	sock_addr6;
+	int			sock_len;
+	char			text_ip[INET6_ADDRSTRLEN];
+	struct timeval		timeout;
+
+	/* get textual representation of the input ip address */
+	ip_to_string(ip_addr, text_ip);
+
+	/* don't connect to already connected peer */
+	if (find_neighbour_by_ip(&global_state->neighbours, ip_addr) != NULL) {
+		printf("connect_to_peer: skipping already connected peer\n");
+		return NULL;
+	}
+
+	memset(&sock_addr6, 0x0, sizeof(sock_addr6));
+	sock_addr6.sin6_family = AF_INET6;
+	sock_addr6.sin6_port = htons(DEFAULT_PORT);
+	memcpy(&sock_addr6.sin6_addr, ip_addr, 16);
+
+	sock_addr = (struct sockaddr *) &sock_addr6;
+	sock_len = sizeof(sock_addr6);
+
+	/* it is safe to set file descriptor to -1 if we define it later */
+	bev = bufferevent_socket_new(global_state->event_loop,
+				     -1,
+				     BEV_OPT_CLOSE_ON_FREE);
+
+	/* subscribe every received P2P message to be processed;
+	 * p2p_process as read callback, NULL as write callback
+	 */
+	bufferevent_setcb(bev,
+			  p2p_process,
+			  NULL,
+			  event_cb,
+			  global_state);
+
+	/* enable bufferevent for read, write and timeout */
+	bufferevent_enable(bev, EV_READ | EV_WRITE | EV_TIMEOUT);
+
+	/* set the timeout value */
+	timeout.tv_sec = TIMEOUT_TIME;
+	timeout.tv_usec = 0;
+
+	/* after TIMEOUT_TIME seconds invoke event_cb */
+	bufferevent_set_timeouts(bev, &timeout, &timeout);
+
+	/* connect to the peer; socket_connect also assigns fd */
+	if (bufferevent_socket_connect(bev, sock_addr, sock_len) < 0) {
+		printf("Connecting to %s failed\n", text_ip);
+		bufferevent_free(bev);
+		return NULL;
+	}
+
+	/* connecting succeeded; add peer to the list of our neighbours */
+	return add_new_neighbour(&global_state->neighbours, ip_addr, bev);
+}
+
+/**
+ * Initiate joining the coincer network.
+ *
+ * @param	global_state	Data for the event loop to work with.
+ */
+int joining_init(global_state_t *global_state)
+{
+	int i;
+
+	for (i = 0; i < DEFAULT_PEERS_SIZE; i++) {
+		connect_to_peer(global_state, DEFAULT_PEERS[i]);
+	}
 
 	return 0;
 }
