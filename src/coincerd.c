@@ -50,8 +50,6 @@ int main(void)
 
 	if (listen_init(&listener, &global_state) != 0) {
 		return 1;
-	} else if (joining_init(&global_state) != 0) {
-		return 2;
 	}
 
 	event_base_dispatch(global_state.event_loop);
