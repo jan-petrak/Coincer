@@ -4,7 +4,10 @@ bin_PROGRAMS = src/coincerd src/coincer
 
 src_coincerd_SOURCES = \
 	src/coincerd.c \
+	src/configuration.c src/configuration.h \
+	src/filing.c src/filing.h \
 	src/linkedlist.c src/linkedlist.h \
+	src/log.c src/log.h \
 	src/neighbours.c src/neighbours.h \
 	src/p2p.c src/p2p.h
 
