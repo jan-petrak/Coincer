@@ -18,9 +18,18 @@
 
 #include <event2/event.h>
 #include <event2/listener.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <time.h>
 
+#include "filing.h"
+#include "log.h"
 #include "neighbours.h"
 #include "p2p.h"
+#include "peers.h"
+
+static void signal_cb(evutil_socket_t fd, short events, void *ctx);
+static void conns_cb(evutil_socket_t fd, short events, void *ctx);
 
 int main(void)
 {
@@ -42,23 +51,120 @@ int main(void)
 	 * - terminate on SIGTERM
 	 */
 
-	struct evconnlistener *listener;
-	struct s_global_state  global_state;
+	struct event		*conns_event;
+	struct timeval		conns_interval;
+	global_state_t		global_state;
+	struct evconnlistener	*listener;
+	struct event		*sigint_event;
+	time_t			t;
 
-	global_state.event_loop = NULL;
-	neighbours_init(&global_state.neighbours);
+	srand((unsigned) time(&t));
 
-	if (listen_init(&listener, &global_state) != 0) {
+	/* initialize all global_state variables */
+	global_state.event_loop	= NULL;
+	if (setup_paths(&global_state.filepaths)) {
 		return 1;
-	} else if (joining_init(&global_state) != 0) {
+	}
+
+	linkedlist_init(&global_state.pending_neighbours);
+	linkedlist_init(&global_state.neighbours);
+	linkedlist_init(&global_state.peers);
+
+	if (fetch_peers(global_state.filepaths.peers, &global_state.peers)) {
 		return 2;
 	}
 
+	/* setup everything needed for TCP listening */
+	if (listen_init(&listener, &global_state) != 0) {
+		return 3;
+	}
+
+	/* register SIGINT event to its callback */
+	sigint_event = evsignal_new(global_state.event_loop,
+				    SIGINT,
+				    signal_cb,
+				    &global_state);
+	if (!sigint_event || event_add(sigint_event, NULL) < 0) {
+		log_error("main - couldn't create or add SIGINT event");
+		return 4;
+	}
+
+	/* setup a function that actively checks the number of neighbours */
+	conns_interval.tv_sec  = 10;
+	conns_interval.tv_usec = 0;
+
+	conns_event = event_new(global_state.event_loop,
+				-1,
+				EV_PERSIST,
+				conns_cb,
+				&global_state);
+	if (!conns_event || event_add(conns_event, &conns_interval) < 0) {
+		log_error("main - couldn't create or add conns_event");
+		return 4;
+	}
+
+	/* initiate joining the coincer network */
+	add_more_connections(&global_state, MIN_NEIGHBOURS);
+
+	/* start the event loop */
 	event_base_dispatch(global_state.event_loop);
 
-	event_base_free(global_state.event_loop);
-	evconnlistener_free(listener);
+	/* SIGINT received, loop terminated; the clean-up part */
+	clear_neighbours(&global_state.pending_neighbours);
 	clear_neighbours(&global_state.neighbours);
+	/* store peers into 'peers' file before cleaning them */
+	store_peers(global_state.filepaths.peers, &global_state.peers);
+	clear_peers(&global_state.peers);
+	clear_paths(&global_state.filepaths);
+
+	evconnlistener_free(listener);
+	event_free(sigint_event);
+	event_free(conns_event);
+	event_base_free(global_state.event_loop);
+
+	printf("\nCoincer says: Bye!\n");
 
 	return 0;
 }
+
+/**
+ * Callback function for a received signal.
+ *
+ * @param	signal	What signal was invoked.
+ * @param	events	Flags of the event occured.
+ * @param	ctx	Global state.
+ */
+static void signal_cb(evutil_socket_t	signal __attribute__((unused)),
+		      short		events __attribute__((unused)),
+		      void		*ctx)
+{
+	global_state_t *global_state = (global_state_t *) ctx;
+
+	event_base_loopexit(global_state->event_loop, NULL);
+}
+
+/**
+ * Actively check the number of neighbours and add more if needed.
+ *
+ * @param	fd	File descriptor.
+ * @param	events	Event flags.
+ * @param	ctx	Global state.
+ */
+static void conns_cb(int	fd	__attribute__((unused)),
+		     short	events	__attribute__((unused)),
+		     void	*ctx)
+{
+	int needed_conns;
+
+	global_state_t *global_state = (global_state_t *) ctx;
+	needed_conns = MIN_NEIGHBOURS -
+		       linkedlist_size(&global_state->neighbours);
+	if (needed_conns > 0) {
+		/* ask twice more peers than we need; it's preferable
+		 * to have more neighbours than minimum
+		 */
+		log_debug("conns_cb - we need %d more neighbours");
+		add_more_connections(global_state, 2 * needed_conns);
+	}
+}
+
