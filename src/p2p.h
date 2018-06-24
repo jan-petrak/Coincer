@@ -20,56 +20,42 @@
 #define P2P_H
 
 #include <event2/event.h>
+#include <netinet/in.h>
 
+#include "filing.h"
 #include "linkedlist.h"
 #include "neighbours.h"
 
-/* number of peers guaranteed to be in the network */
-#define	DEFAULT_PEERS_SIZE	3
 /* default port for TCP listening */
 #define	DEFAULT_PORT		31070
-/* minimum number of peers we need to be connected to */
-#define	MINIMUM_NEIGHBOURS	2
 /* after TIMEOUT_TIME seconds invoke timeout callback */
 #define	TIMEOUT_TIME 		30
-
-/* IPv6 addresses of peers guaranteed to be in the network */
-static const unsigned char DEFAULT_PEERS[DEFAULT_PEERS_SIZE][16] = {
-	/* TODO: Replace with the actual default peer IPs */
-	{
-		(int)0, (int)0, (int)0, (int)0,
-		(int)0, (int)0, (int)0, (int)0,
-		(int)0, (int)0, (int)0, (int)0,
-		(int)0, (int)0, (int)0, (int)1
-	},
-	{
-		(int)0, (int)0, (int)0, (int)0,
-		(int)0, (int)0, (int)0, (int)0,
-		(int)0, (int)0, (int)255, (int)255,
-		(int)192, (int)168, (int)0, (int)125
-	},
-	{
-		(int)0, (int)0, (int)0, (int)0,
-		(int)0, (int)0, (int)0, (int)0,
-		(int)0, (int)0, (int)255, (int)255,
-		(int)192, (int)168, (int)0, (int)130
-	}
-
-};
 
 /**
  * Event loop works with the data stored in an instance of this struct.
  */
 typedef struct s_global_state {
-	struct event_base *event_loop; /**< For holding and polling events. */
-	linkedlist_t neighbours; /**< Linked list of our neighbours. */
+	/**< For holding and polling events. */
+	struct event_base *event_loop;
+	/**< Holder of paths to needed files/dirs. */
+	filepaths_t filepaths;
+	/**< Linked list of our neighbours. */
+	linkedlist_t neighbours;
+	/**< Linked list of some peers in the network. */
+	linkedlist_t peers;
+	/**< Peers that didn't accept/reject us yet. */
+	linkedlist_t pending_neighbours;
 } global_state_t;
 
 int listen_init(struct evconnlistener	**listener,
 		global_state_t		*global_state);
 
-int joining_init(global_state_t *global_state);
+void add_more_connections(global_state_t *global_state, size_t conns_amount);
 
-neighbour_t *connect_to_peer(global_state_t		*global_state,
-			     const unsigned char	*ip_addr);
+int connect_to_addr(global_state_t		*global_state,
+		    const struct in6_addr	*addr);
+
+void ask_for_peers(neighbour_t *neighbour);
+
 #endif /* P2P_H */
+
