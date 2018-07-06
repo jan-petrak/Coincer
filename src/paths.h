@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -16,11 +16,8 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FILING_H
-#define FILING_H
-
-#include <arpa/inet.h>
-#include <stdint.h>
+#ifndef PATHS_H
+#define PATHS_H
 
 /** Paths to needed files and directories. */
 typedef struct s_filepaths {
@@ -36,5 +33,4 @@ typedef struct s_filepaths {
 void clear_paths(filepaths_t *filepaths);
 int setup_paths(filepaths_t *filepaths);
 
-#endif /* FILING_H */
-
+#endif /* PATHS_H */

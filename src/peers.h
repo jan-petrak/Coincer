@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -47,11 +47,11 @@ static const unsigned char DEFAULT_PEERS[DEFAULT_PEERS_SIZE][16] = {
 
 /** Peer info holder. */
 typedef struct s_peer {
-	/**< Binary IPv6 address. */
+	/** Binary IPv6 address. */
 	struct in6_addr	addr;
-	/**< A peer is not available if they is already our neighbour,
-	 *   pending to become one, or if we are unnable to connect to them.
-	 *   1 if available, 0 if not.
+	/** A peer is not available if they is already our neighbour,
+	 *  pending to become one, or if we are unnable to connect to them.
+	 *  1 if available, 0 if not.
 	 */
 	short is_available;
 	/* TODO: add uptime */
@@ -78,4 +78,3 @@ void shuffle_peers_arr(peer_t *peers[MAX_PEERS_SIZE], size_t peers_size);
 int store_peers(const char *peers_path, const linkedlist_t *peers);
 
 #endif /* PEERS_H */
-

@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,7 +15,6 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 
 #define _POSIX_SOURCE		/* strtok_r */
 
@@ -63,8 +62,7 @@ void ask_for_peers(neighbour_t *neighbour)
 	}
 
 	/* send message "peers" to the neighbour, as a request
-	 * for the list of peers; 6 is the number of bytes to be transmitted
-	 */
+	 * for the list of peers; 6 is the number of bytes to be transmitted */
 	evbuffer_add(bufferevent_get_output(bev), "peers", 6);
 }
 
@@ -85,7 +83,7 @@ static void process_peers(global_state_t *global_state, char *peers)
 
 	while (line != NULL) {
 		if (inet_pton(AF_INET6, line, &addr) == 1) {
-			add_peer(&global_state->peers, &addr);
+			save_peer(&global_state->peers, &addr);
 		}
 		line = strtok_r(NULL, delim, &save_ptr);
 	}
@@ -180,17 +178,15 @@ static void timeout_process(linkedlist_t	*neighbours,
 
 	/* the neighbour hasn't failed enough pings to be deleted */
 	if (neighbour->failed_pings < 3) {
-
 		/* bufferevent was disabled when timeout flag was set */
 		bufferevent_enable(neighbour->buffer_event,
 			EV_READ | EV_WRITE | EV_TIMEOUT);
 
-		log_debug("timeout_process - sending ping to %s."
-			  " Failed pings: %lu", text_ip,
-						neighbour->failed_pings);
+		log_debug("timeout_process - sending ping to %s. "
+			  "Failed pings: %lu", text_ip,
+					       neighbour->failed_pings);
 		/* send ping to the inactive neighbour;
-		 * 5 is the length of bytes to be transmitted
-		 */
+		 * 5 is the length of bytes to be transmitted */
 		evbuffer_add(bufferevent_get_output(neighbour->buffer_event),
 			"ping", 5);
 
@@ -204,12 +200,12 @@ static void timeout_process(linkedlist_t	*neighbours,
 }
 
 /**
- * Delete 'neighbour' from 'pending_neighbours' and add it into 'neighbours'.
+ * Delete neighbour from pending and add it into neighbours.
  *
  * @param	global_state	Global state.
  * @param	neighbour	Neighbour to be moved.
  *
- * @param	neighbour_t	The new neighbour in the 'neighbours'.
+ * @param	neighbour_t	The new neighbour added into neighbours.
  * @param	NULL		If adding failed.
  */
 static neighbour_t *move_neighbour_from_pending(global_state_t	*global_state,
@@ -233,11 +229,11 @@ static neighbour_t *move_neighbour_from_pending(global_state_t	*global_state,
 }
 
 /**
- * Process the event that occured on our pending neighbour 'neighbour'.
+ * Process the event that occurred on our pending neighbour.
  *
  * @param	global_state	Global state.
- * @param	neighbour	The event occured on this pending neighbour.
- * @param	events		What event occured.
+ * @param	neighbour	The event occurred on this pending neighbour.
+ * @param	events		What event occurred.
  */
 static void process_pending_neighbour(global_state_t	*global_state,
 				      neighbour_t	*neighbour,
@@ -254,7 +250,7 @@ static void process_pending_neighbour(global_state_t	*global_state,
 	ip_to_string(&neighbour->addr, text_ip);
 
 	/* we've successfully connected to the neighbour */
-	if (events & (BEV_EVENT_CONNECTED)) {
+	if (events & BEV_EVENT_CONNECTED) {
 		log_info("process_pending_neighbour - connecting to "
 			 "%s was SUCCESSFUL", text_ip);
 		/* we've got a new neighbour;
@@ -272,8 +268,8 @@ static void process_pending_neighbour(global_state_t	*global_state,
 		/* if we need more neighbours */
 		if (needed_conns > 0) {
 			/* and we don't have enough available */
-			if ((int)available_peers_size < needed_conns) {
-				ask_for_peers(new_neighbour);
+			if ((int) available_peers_size < needed_conns) {
+				ask_for_addresses(new_neighbour);
 			}
 		}
 	/* connecting to the neighbour was unsuccessful */
@@ -282,16 +278,16 @@ static void process_pending_neighbour(global_state_t	*global_state,
 			 "%s was NOT SUCCESSFUL", text_ip);
 		/* the peer is no longer a pending neighbour */
 		delete_neighbour(&global_state->pending_neighbours,
-				  neighbour->buffer_event);
+				 neighbour->buffer_event);
 	}
 }
 
 /**
- * Process the event that occured on our neighbour 'neighbour'.
+ * Process the event that occurred on our neighbour.
  *
  * @param	global_state	Global state.
- * @param	neighbour	The event occured on this neighbour.
- * @param	events		What event occured.
+ * @param	neighbour	The event occurred on this neighbour.
+ * @param	events		What event occurred.
  */
 static void process_neighbour(global_state_t	*global_state,
 			      neighbour_t	*neighbour,
@@ -307,7 +303,7 @@ static void process_neighbour(global_state_t	*global_state,
 			 text_ip);
 		delete_neighbour(&global_state->neighbours,
 				 neighbour->buffer_event);
-	} else if (events & (BEV_EVENT_EOF)) {
+	} else if (events & BEV_EVENT_EOF) {
 		log_info("process_neighbour - %s disconnected", text_ip);
 		delete_neighbour(&global_state->neighbours,
 				 neighbour->buffer_event);
@@ -320,8 +316,8 @@ static void process_neighbour(global_state_t	*global_state,
 /**
  * Callback for bufferevent event detection.
  *
- * @param	bev	bufferevent on which the event occured.
- * @param	events	Flags of the events occured.
+ * @param	bev	bufferevent on which the event occurred.
+ * @param	events	Flags of the events occurred.
  * @param	ctx	Pointer to global_state_t to determine the neighbour.
  */
 static void event_cb(struct bufferevent *bev, short events, void *ctx)
@@ -337,9 +333,8 @@ static void event_cb(struct bufferevent *bev, short events, void *ctx)
 	} else {
 		neighbour = find_neighbour(&global_state->pending_neighbours,
 					   bev);
-		/* 'bev' must belong either to 'neighbours' or
-		 * 'pending_neighbours'
-		 */
+		/* 'bev' must belong to either 'neighbours' or
+		 * 'pending_neighbours' */
 		assert(neighbour != NULL);
 		process_pending_neighbour(global_state, neighbour, events);
 	}
@@ -387,8 +382,7 @@ static void accept_connection(struct evconnlistener *listener,
 	bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
 
 	/* subscribe every received P2P message to be processed;
-	 * p2p_process for read callback, NULL for write callback
-	 */
+	 * p2p_process for read callback, NULL for write callback */
 	bufferevent_setcb(bev, p2p_process, NULL, event_cb, ctx);
 
 	bufferevent_enable(bev, EV_READ | EV_WRITE | EV_TIMEOUT);
@@ -403,8 +397,6 @@ static void accept_connection(struct evconnlistener *listener,
 	if (!add_new_neighbour(&global_state->neighbours,
 			       new_addr,
 			       bev)) {
-
-		/* free the bufferevent if adding failed */
 		log_debug("accept_connection - adding failed");
 		bufferevent_free(bev);
 		return;
@@ -412,13 +404,13 @@ static void accept_connection(struct evconnlistener *listener,
 
 	log_info("accept_connection - new connection from [%s]:%d", text_ip,
 		ntohs(addr_in6->sin6_port));
-	add_peer(&global_state->peers, new_addr);
+	save_peer(&global_state->peers, new_addr);
 }
 
 /**
  * Callback for listener error detection.
  *
- * @param	listener	Listener on which the error occured.
+ * @param	listener	Listener on which the error occurred.
  * @param	ctx		Pointer to global_state_t.
  */
 static void accept_error_cb(struct evconnlistener *listener,
@@ -444,8 +436,8 @@ static void accept_error_cb(struct evconnlistener *listener,
  * @param	listener	The event loop listener.
  * @param	global_state	Data for the event loop to work with.
  *
- * @return	0 if successfully initialized.
- * @return	1 if an error occured.
+ * @return	0		If successfully initialized.
+ * @return	1		If an error occurred.
  */
 int listen_init(struct evconnlistener 	**listener,
 		global_state_t		*global_state)
@@ -485,12 +477,12 @@ int listen_init(struct evconnlistener 	**listener,
 }
 
 /**
- * Attempt to connect to the particular addr.
+ * Attempt to connect to a particular addr.
  *
  * @param	global_state	Data for the event loop to work with.
  * @param	addr		Binary IP of a peer that we want to connect to.
  *
- * @return	0		The connection attempt was succesful.
+ * @return	0		The connection attempt was successful.
  * @return	1		The peer is already our neighbour.
  * @return	2		The peer is pending to become our neighbour.
  * @return	3		Adding new pending neighbour unsuccessful.
@@ -535,8 +527,7 @@ int connect_to_addr(global_state_t		*global_state,
 				     BEV_OPT_CLOSE_ON_FREE);
 
 	/* subscribe every received P2P message to be processed;
-	 * p2p_process as read callback, NULL as write callback
-	 */
+	 * p2p_process as read callback, NULL as write callback */
 	bufferevent_setcb(bev,
 			  p2p_process,
 			  NULL,
@@ -554,8 +545,7 @@ int connect_to_addr(global_state_t		*global_state,
 	bufferevent_set_timeouts(bev, &timeout, &timeout);
 
 	/* add peer to the list of pending neighbours and let event_cb
-	 * determine whether the peer is our neighbour now
-	 */
+	 * determine whether the peer is our neighbour now */
 	if (!add_new_neighbour(&global_state->pending_neighbours, addr, bev)) {
 		log_debug("connect_to_addr - neighbour %s NOT ADDED into "
 			  "pending neighbours", text_ip);
@@ -602,7 +592,7 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 		log_debug("add_more_connections - "
 			  "choosing random default peer");
 		/* choose random default peer */
-		idx = rand()%DEFAULT_PEERS_SIZE;
+		idx = rand() % DEFAULT_PEERS_SIZE;
 		memcpy(&addr, DEFAULT_PEERS[idx], 16);
 
 		result = connect_to_addr(global_state, &addr);
@@ -617,9 +607,7 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 			 */
 			log_debug("add_more_connections - "
 				  "connect attempt succeeded");
-		/* the peer is our neighbour;
-		 * ask them for more peers
-		 */
+		/* the peer is our neighbour; ask them for more addrs */
 		} else if (result == 1) {
 			neigh = find_neighbour_by_addr(&global_state->
 						       neighbours,

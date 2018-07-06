@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,10 +22,10 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "filing.h"
 #include "log.h"
 #include "neighbours.h"
 #include "p2p.h"
+#include "paths.h"
 #include "peers.h"
 
 static void signal_cb(evutil_socket_t fd, short events, void *ctx);
@@ -122,8 +122,6 @@ int main(void)
 	event_free(conns_event);
 	event_base_free(global_state.event_loop);
 
-	printf("\nCoincer says: Bye!\n");
-
 	return 0;
 }
 
@@ -131,7 +129,7 @@ int main(void)
  * Callback function for a received signal.
  *
  * @param	signal	What signal was invoked.
- * @param	events	Flags of the event occured.
+ * @param	events	Flags of the event occurred.
  * @param	ctx	Global state.
  */
 static void signal_cb(evutil_socket_t	signal __attribute__((unused)),
@@ -160,11 +158,9 @@ static void conns_cb(int	fd	__attribute__((unused)),
 	needed_conns = MIN_NEIGHBOURS -
 		       linkedlist_size(&global_state->neighbours);
 	if (needed_conns > 0) {
-		/* ask twice more peers than we need; it's preferable
-		 * to have more neighbours than minimum
-		 */
 		log_debug("conns_cb - we need %d more neighbours");
+		/* ask twice more peers than we need; it's preferable
+		 * to have more neighbours than minimum */
 		add_more_connections(global_state, 2 * needed_conns);
 	}
 }
-

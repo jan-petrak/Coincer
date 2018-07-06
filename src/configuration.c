@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -195,4 +195,3 @@ int setup_directories(char **config_dir, char **data_dir)
 
 	return 0;
 }
-

@@ -18,6 +18,7 @@
 
 #include <assert.h>
 #include <event2/bufferevent.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,71 +26,6 @@
 #include "linkedlist.h"
 #include "log.h"
 #include "neighbours.h"
-
-/**
- * Find neighbour in neighbours based on their bufferevent.
- *
- * @param	neighbours	Our neighbours.
- * @param	bev		Neighbour's bufferevent.
- *
- * @return	neighbour_t	Requested neighbour.
- * @return	NULL		If not found.
- */
-neighbour_t *find_neighbour(const linkedlist_t		*neighbours,
-                            const struct bufferevent	*bev)
-{
-	/* start the search from the first linked list node */
-	const linkedlist_node_t *current = linkedlist_get_first(neighbours);
-
-	while (current != NULL) {
-
-		/* data of the 'current' node; struct s_neighbour */
-		neighbour_t *current_data = (neighbour_t *) current->data;
-
-		/* bufferevents equal => neighbour found */
-		if (current_data->buffer_event == bev) {
-
-			/* return node's data; struct s_neighbour */
-			return current_data;
-		}
-		/* get next node in the linked list */
-		current = linkedlist_get_next(neighbours, current);
-	}
-	/* neighbour not found */
-	return NULL;
-}
-
-/**
- * Find neighbour in neighbours based on their addr.
- *
- * @param	neighbours	Our neighbours.
- * @param	addr		Binary ip address stored in 16 bytes.
- *
- * @return	neighbour_t	Requested neighbour.
- * @return	NULL		If not found.
- */
-neighbour_t *find_neighbour_by_addr(const linkedlist_t		*neighbours,
-                                    const struct in6_addr	*addr)
-{
-	/* start the search from the first linked list node */
-	const linkedlist_node_t *current = linkedlist_get_first(neighbours);
-
-	while (current != NULL) {
-
-		/* data of the 'current' node; struct s_neighbour */
-		neighbour_t *current_data = (neighbour_t *) current->data;
-
-		/* ip addresses match => neighbour found */
-		if (memcmp(&current_data->addr, addr, 16) == 0) {
-			/* return node's data; struct s_neighbour */
-			return current_data;
-		}
-		/* get next node in the linked list */
-		current = linkedlist_get_next(neighbours, current);
-	}
-	/* neighbour not found */
-	return NULL;
-}
 
 /**
  * Add new neighbour into neighbours.
@@ -138,6 +74,33 @@ neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
 }
 
 /**
+ * Delete all neighbours.
+ *
+ * @param	neighbours	Linked list of our neighbours.
+ */
+void clear_neighbours(linkedlist_t *neighbours)
+{
+	neighbour_t		*current;
+	linkedlist_node_t	*current_node;
+
+	current_node = linkedlist_get_first(neighbours);
+	/* safely delete data from the linked list nodes */
+	while (current_node != NULL) {
+		/* load current node's data into 'current' */
+		current = (neighbour_t *) current_node->data;
+
+		/* deallocate neighbour's bufferevent */
+		bufferevent_free(current->buffer_event);
+
+		/* get next node in the linked list */
+		current_node = linkedlist_get_next(neighbours, current_node);
+	}
+
+	/* safely delete all nodes and their data in the linked list */
+	linkedlist_destroy(neighbours);
+}
+
+/**
  * Delete neighbour from neighbours.
  *
  * @param	neighbours	Linked list of our neighbours.
@@ -165,29 +128,64 @@ void delete_neighbour(linkedlist_t *neighbours, struct bufferevent *bev)
 }
 
 /**
- * Delete all neighbours.
+ * Find neighbour in neighbours based on their bufferevent.
  *
- * @param	neighbours	Linked list of our neighbours.
+ * @param	neighbours	Our neighbours.
+ * @param	bev		Neighbour's bufferevent.
+ *
+ * @return	neighbour_t	Requested neighbour.
+ * @return	NULL		If not found.
  */
-void clear_neighbours(linkedlist_t *neighbours)
+neighbour_t *find_neighbour(const linkedlist_t		*neighbours,
+                            const struct bufferevent	*bev)
 {
-	neighbour_t		*current;
-	linkedlist_node_t	*current_node;
+	/* start the search from the first linked list node */
+	const linkedlist_node_t *current = linkedlist_get_first(neighbours);
 
-	current_node = linkedlist_get_first(neighbours);
-	/* safely delete data from the linked list nodes */
-	while (current_node != NULL) {
-		/* load current node's data into 'current' */
-		current = (neighbour_t *) current_node->data;
+	while (current != NULL) {
+		/* data of the 'current' node; struct s_neighbour */
+		neighbour_t *current_data = (neighbour_t *) current->data;
 
-		/* deallocate neighbour's bufferevent */
-		bufferevent_free(current->buffer_event);
+		/* bufferevents equal => neighbour found */
+		if (current_data->buffer_event == bev) {
 
+			/* return node's data; struct s_neighbour */
+			return current_data;
+		}
 		/* get next node in the linked list */
-		current_node = linkedlist_get_next(neighbours, current_node);
+		current = linkedlist_get_next(neighbours, current);
 	}
-
-	/* safely delete all nodes and their data in the linked list */
-	linkedlist_destroy(neighbours);
+	/* neighbour not found */
+	return NULL;
 }
 
+/**
+ * Find neighbour in neighbours based on their addr.
+ *
+ * @param	neighbours	Our neighbours.
+ * @param	addr		Binary ip address stored in 16 bytes.
+ *
+ * @return	neighbour_t	Requested neighbour.
+ * @return	NULL		If not found.
+ */
+neighbour_t *find_neighbour_by_addr(const linkedlist_t		*neighbours,
+                                    const struct in6_addr	*addr)
+{
+	/* start the search from the first linked list node */
+	const linkedlist_node_t *current = linkedlist_get_first(neighbours);
+
+	while (current != NULL) {
+		/* data of the 'current' node; struct s_neighbour */
+		neighbour_t *current_data = (neighbour_t *) current->data;
+
+		/* ip addresses match => neighbour found */
+		if (memcmp(&current_data->addr, addr, 16) == 0) {
+			/* return node's data; struct s_neighbour */
+			return current_data;
+		}
+		/* get next node in the linked list */
+		current = linkedlist_get_next(neighbours, current);
+	}
+	/* neighbour not found */
+	return NULL;
+}

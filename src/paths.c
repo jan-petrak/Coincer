@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -16,17 +16,15 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h> /* chmod */
 
 #include "configuration.h"
-#include "filing.h"
 #include "log.h"
+#include "paths.h"
 
-static const char *PEERS_FILE_NAME = "peers";
+#define PEERS_FILE_NAME "peers"
 
 /**
  * Sets path to peers file.
@@ -41,9 +39,9 @@ static int set_peers_path(char *data_dir, char **peers)
 {
 	FILE *peers_file;
 
-	/* size of data_dir + PEERS_FILE_NAME + '\0' */
+	/* size of data_dir + PEERS_FILE_NAME */
 	*peers = (char *) malloc(strlen(data_dir) +
-				 strlen(PEERS_FILE_NAME) + 1);
+				 sizeof(PEERS_FILE_NAME));
 	if (*peers == NULL) {
 		log_error("set_peers_path - peers file malloc");
 		return 1;
@@ -51,13 +49,6 @@ static int set_peers_path(char *data_dir, char **peers)
 
 	strcpy(*peers, data_dir);
 	strcat(*peers, PEERS_FILE_NAME);
-
-	/* create file if doesn't exist */
-	peers_file = fopen(*peers, "a");
-	fclose(peers_file);
-
-	/* change permissions */
-	chmod(*peers, strtol("0600", 0, 8));
 
 	return 0;
 }
@@ -94,4 +85,3 @@ void clear_paths(filepaths_t *filepaths)
 
 	free(filepaths->peers);
 }
-

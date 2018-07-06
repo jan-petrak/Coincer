@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -69,4 +69,3 @@ linkedlist_node_t *linkedlist_insert_before(linkedlist_t	*root,
 size_t linkedlist_size(const linkedlist_t *root);
 
 #endif /* LINKEDLIST_H */
-

@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,84 +27,6 @@
 #include "peers.h"
 
 /**
- * Add new peer into sorted linkedlist of peers.
- *
- * @param	peers	The linkedlist of peers.
- * @param	addr	Address of the new peer.
- *
- * @return	linkedlist_node_t	Newly added node in the linkedlist.
- * @return	NULL			Peer is already added, default or
- *					allocation failure.
- */
-linkedlist_node_t *add_peer(linkedlist_t *peers, const struct in6_addr *addr)
-{
-	int			cmp_value;
-	struct in6_addr		curr_addr;
-	linkedlist_node_t	*current_node;
-	peer_t			*current_peer;
-	int			i;
-	linkedlist_node_t	*new_node;
-	peer_t			*new_peer;
-	char			text_ip[INET6_ADDRSTRLEN];
-
-	/* add peer to the list of known peers, unless it's a default peer */
-	for (i = 0; i < DEFAULT_PEERS_SIZE; i++) {
-		memcpy(&curr_addr, DEFAULT_PEERS[i], 16);
-		/* it's a default peer, don't add it into 'peers' */
-		if (memcmp(&curr_addr, addr, 16) == 0) {
-			return NULL;
-		}
-	}
-
-	/* allocate memory for a new peer */
-	new_peer = (peer_t *) malloc(sizeof(peer_t));
-	if (new_peer == NULL) {
-		log_error("add_peer - malloc");
-		return NULL;
-	}
-
-	/* initialize all attributes of the new peer */
-	memcpy(&new_peer->addr, addr, 16);
-	new_peer->is_available = 1;
-
-	/* get textual representation of 'addr' */
-	inet_ntop(AF_INET6, addr, text_ip, INET6_ADDRSTRLEN);
-
-	/* insert 'new_peer' to its proper position in the sorted linkedlist;
-	 * start from the last node of 'peers', as 'fetch_peers' (using this
-	 * function) is likely to add in ascending order => better performance
-	 */
-	current_node = linkedlist_get_last(peers);
-	while (current_node != NULL) {
-		current_peer = (peer_t *) current_node->data;
-
-		cmp_value = memcmp(&new_peer->addr, &current_peer->addr, 16);
-		/* the linkedlist already contains this peer */
-		if (cmp_value == 0) {
-			free(new_peer);
-			return NULL;
-		} else if (cmp_value > 0) {
-			/* the proper position found */
-			new_node = linkedlist_insert_after(peers,
-							   current_node,
-							   new_peer);
-			if (new_node != NULL) {
-				log_debug("add_peer - %s successfully added",
-					  text_ip);
-			}
-			return new_node;
-		}
-		current_node = linkedlist_get_prev(peers, current_node);
-	}
-	/* the new peer's addr is lexicographically the lowest */
-	new_node = linkedlist_insert_after(peers, &peers->first, new_peer);
-	if (new_node != NULL) {
-		log_debug("add_peer - %s successfully added", text_ip);
-	}
-	return new_node;
-}
-
-/**
  * Delete all peers and their data.
  *
  * @param	peers	Linkedlist of peers.
@@ -116,12 +38,12 @@ void clear_peers(linkedlist_t *peers)
 }
 
 /**
- * Fetch available peers from 'peers' into 'available_peers'.
+ * Fetch available peers from linkedlist into an array.
  *
  * @param	peers		All peers known to us.
  * @param	available_peers	The peers marked as available.
  *
- * @return	n		The number of available peers.
+ * @return	>=0		The number of available peers.
  */
 size_t fetch_available_peers(const linkedlist_t *peers,
 			     peer_t *available_peers[MAX_PEERS_SIZE])
@@ -151,7 +73,7 @@ size_t fetch_available_peers(const linkedlist_t *peers,
 }
 
 /**
- * Fetch peers from 'peers_path' file into 'peers' linkedlist.
+ * Fetch peers from file into linkedlist.
  *
  * @param	peers_path	Path to 'peers' file.
  * @param	peers		Fetch loaded peers in here.
@@ -243,7 +165,8 @@ void peers_to_str(const linkedlist_t *peers, char *output)
 }
 
 /**
- * Set all peers available.
+ * Set all peers as available. Definition of availability
+ * is within peer_t in peers.h.
  *
  * @param	peers	The peers to be set as available.
  */
@@ -262,7 +185,85 @@ void reset_peers_availability(linkedlist_t *peers)
 }
 
 /**
- * Shuffle the input array 'peers'.
+ * Save new peer into sorted linkedlist of peers.
+ *
+ * @param	peers			The linkedlist of peers.
+ * @param	addr			Address of the new peer.
+ *
+ * @return	linkedlist_node_t	Newly added node in the linkedlist.
+ * @return	NULL			Peer is already added, default or
+ *					allocation failure.
+ */
+linkedlist_node_t *save_peer(linkedlist_t *peers, const struct in6_addr *addr)
+{
+	int			cmp_value;
+	struct in6_addr		curr_addr;
+	linkedlist_node_t	*current_node;
+	peer_t			*current_peer;
+	int			i;
+	linkedlist_node_t	*new_node;
+	peer_t			*new_peer;
+	char			text_ip[INET6_ADDRSTRLEN];
+
+	/* add peer to the list of known peers, unless it's a default peer */
+	for (i = 0; i < DEFAULT_PEERS_SIZE; i++) {
+		memcpy(&curr_addr, DEFAULT_PEERS[i], 16);
+		/* it's a default peer, don't add it into 'peers' */
+		if (memcmp(&curr_addr, addr, 16) == 0) {
+			return NULL;
+		}
+	}
+
+	/* allocate memory for a new peer */
+	new_peer = (peer_t *) malloc(sizeof(peer_t));
+	if (new_peer == NULL) {
+		log_error("add_peer - malloc");
+		return NULL;
+	}
+
+	/* initialize all attributes of the new peer */
+	memcpy(&new_peer->addr, addr, 16);
+	new_peer->is_available = 1;
+
+	/* get textual representation of 'addr' */
+	inet_ntop(AF_INET6, addr, text_ip, INET6_ADDRSTRLEN);
+
+	/* insert 'new_peer' to its proper position in the sorted linkedlist;
+	 * start from the last node of 'peers', as 'fetch_peers' (using this
+	 * function) is likely to add in ascending order => better performance
+	 */
+	current_node = linkedlist_get_last(peers);
+	while (current_node != NULL) {
+		current_peer = (peer_t *) current_node->data;
+
+		cmp_value = memcmp(&new_peer->addr, &current_peer->addr, 16);
+		/* the linkedlist already contains this peer */
+		if (cmp_value == 0) {
+			free(new_peer);
+			return NULL;
+		} else if (cmp_value > 0) {
+			/* the proper position found */
+			new_node = linkedlist_insert_after(peers,
+							   current_node,
+							   new_peer);
+			if (new_node != NULL) {
+				log_debug("add_peer - %s successfully added",
+					  text_ip);
+			}
+			return new_node;
+		}
+		current_node = linkedlist_get_prev(peers, current_node);
+	}
+	/* the new peer's addr is lexicographically the lowest */
+	new_node = linkedlist_insert_after(peers, &peers->first, new_peer);
+	if (new_node != NULL) {
+		log_debug("add_peer - %s successfully added", text_ip);
+	}
+	return new_node;
+}
+
+/**
+ * Shuffle the input array of peers.
  *
  * @param	peers		The peers to be shuffled.
  * @param	peers_size	Number of peers to be shuffled.
@@ -284,7 +285,7 @@ void shuffle_peers_arr(peer_t *peers[MAX_PEERS_SIZE], size_t peers_size)
 }
 
 /**
- * Store peers from the linkedlist 'peers' into file at 'peers_path'.
+ * Store peers from a linkedlist into a file.
  *
  * @param	peers_path		Path to 'peers' file.
  * @param	peers			Linkedlist of the peers to be stored.
@@ -317,4 +318,3 @@ int store_peers(const char *peers_path, const linkedlist_t *peers)
 	fclose(peers_file);
 	return 0;
 }
-

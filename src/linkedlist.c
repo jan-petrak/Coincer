@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -194,7 +194,8 @@ void linkedlist_init(linkedlist_t *root)
 }
 
 /**
- * Insert new node into linked list after 'node'.
+ * Insert new node into linkedlist after 'node'. In case of 'node' being the
+ * last (stub) node, insert before it.
  *
  * @param	root			Root of the linked list.
  * @param	node			Insert new node right after this node.
@@ -230,7 +231,8 @@ linkedlist_node_t *linkedlist_insert_after(linkedlist_t		*root,
 }
 
 /**
- * Insert new node into linkedlist before 'node'.
+ * Insert new node into linkedlist before 'node'. In case of 'node' being
+ * the first (stub) node, insert after it.
  *
  * @param	root			Root of the linked list.
  * @param	node			Insert new node right before this node.
@@ -269,4 +271,3 @@ size_t linkedlist_size(const linkedlist_t *root)
 
 	return n;
 }
-
