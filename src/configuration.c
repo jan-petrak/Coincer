@@ -38,7 +38,7 @@ static int set_homedir(char **homedir)
 {
 	*homedir = getenv("HOME");
 	if (*homedir == NULL || *homedir[0] == '\0') {
-		log_error("set_homedir - cannot find home directory");
+		log_error("Can not find home directory");
 		return 1;
 	}
 	return 0;
@@ -70,7 +70,7 @@ static int set_directories(char **config_dir, char **data_dir)
 					     sizeof("/.config/" PACKAGE_NAME
 						    "/"));
 		if (*config_dir == NULL) {
-			log_error("set_directories - setting config_dir");
+			log_error("Setting configdir");
 			return 1;
 		}
 		strcpy(*config_dir, homedir);
@@ -80,7 +80,7 @@ static int set_directories(char **config_dir, char **data_dir)
 		*config_dir = (char *) malloc(tmpsize +
 					     sizeof("/" PACKAGE_NAME "/"));
 		if (*config_dir == NULL) {
-			log_error("set_directories - setting config_dir");
+			log_error("Setting configdir");
 			return 1;
 		}
 		strcpy(*config_dir, tmpchar);
@@ -99,7 +99,7 @@ static int set_directories(char **config_dir, char **data_dir)
 					   sizeof("/.local/share/" PACKAGE_NAME
 						  "/"));
 		if (*data_dir == NULL) {
-			log_error("set_directories - setting data_dir");
+			log_error("Setting datadir");
 			free(config_dir);
 			return 1;
 		}
@@ -110,7 +110,7 @@ static int set_directories(char **config_dir, char **data_dir)
 		*data_dir = (char *) malloc(tmpsize +
 					   sizeof("/" PACKAGE_NAME "/"));
 		if (*data_dir == NULL) {
-			log_error("set_directories - setting data_dir");
+			log_error("Setting datadir");
 			free(config_dir);
 			return 1;
 		}
@@ -139,16 +139,15 @@ static int create_dirs(const char *config_dir, const char *data_dir)
 		if (errno == ENOENT) {
 			/* create */
 			if (mkdir(config_dir, S_IRWXU)) {
-				log_error("create_dirs - could not create "
-					  "configuration directory %s",
-					  config_dir);
+				log_error("Could not create configuration "
+					  "directory %s", config_dir);
 				return 1;
 			} else {
 				log_debug("create_dirs - created configuration "
 					  "directory %s", config_dir);
 			}
 		} else {
-			log_error("create_dirs - could not open configuration "
+			log_error("Could not open configuration "
 				  "directory %s", config_dir);
 			return 1;
 		}
@@ -159,17 +158,15 @@ static int create_dirs(const char *config_dir, const char *data_dir)
 		if (errno == ENOENT) {
 			/* create */
 			if (mkdir(data_dir, S_IRWXU)) {
-				log_error("create_dirs - could not create "
-					  "data directory %s",
-					  data_dir);
+				log_error("Could not create "
+					  "data directory %s", data_dir);
 				return 1;
 			} else {
 				log_debug("create_dirs - created data "
 					  "directory %s", data_dir);
 			}
 		} else {
-			log_error("create_dirs - could not open data "
-				  "directory %s", data_dir);
+			log_error("Could not open data directory %s", data_dir);
 			return 1;
 		}
 	}

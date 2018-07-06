@@ -216,7 +216,7 @@ linkedlist_node_t *linkedlist_insert_after(linkedlist_t		*root,
 
 	new_node = (linkedlist_node_t *) malloc(sizeof(linkedlist_node_t));
 	if (new_node == NULL) {
-		log_error("linkedlist_insert_after - malloc");
+		log_error("Inserting a new node");
 		return NULL;
 	}
 

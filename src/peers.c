@@ -38,48 +38,13 @@ void clear_peers(linkedlist_t *peers)
 }
 
 /**
- * Fetch available peers from linkedlist into an array.
- *
- * @param	peers		All peers known to us.
- * @param	available_peers	The peers marked as available.
- *
- * @return	>=0		The number of available peers.
- */
-size_t fetch_available_peers(const linkedlist_t *peers,
-			     peer_t *available_peers[MAX_PEERS_SIZE])
-{
-	linkedlist_node_t	*current_node;
-	peer_t			*current_peer;
-	size_t			n = 0;
-
-	current_node = linkedlist_get_first(peers);
-	while (current_node != NULL) {
-		current_peer = (peer_t *) current_node->data;
-		if (current_peer->is_available) {
-			/* we can use this function with 'available_peers'
-			 * set to NULL just to get the number of available
-			 * peers as return value
-			 */
-			if (available_peers != NULL) {
-				available_peers[n++] = current_peer;
-			} else {
-				n++;
-			}
-		}
-		current_node = linkedlist_get_next(peers, current_node);
-	}
-
-	return n;
-}
-
-/**
  * Fetch peers from file into linkedlist.
  *
- * @param	peers_path	Path to 'peers' file.
+ * @param	peers_path	Path to peers file.
  * @param	peers		Fetch loaded peers in here.
  *
  * @return	0		Successfully fetched.
- * @return	1		Failure.
+ * @return	1		Peers file could not be opened.
  */
 int fetch_peers(const char *peers_path, linkedlist_t *peers)
 {
@@ -88,16 +53,64 @@ int fetch_peers(const char *peers_path, linkedlist_t *peers)
 
 	peers_file = fopen(peers_path, "rb");
 	if (peers_file == NULL) {
-		log_error("fetch_peers - peers_file not found");
+		log_warning("Peers file not found at %", peers_path);
 		return 1;
 	}
 
 	while (fread(&addr, sizeof(struct in6_addr), 1, peers_file) == 1) {
-		add_peer(peers, &addr);
+		save_peer(peers, &addr);
 	}
 
 	fclose(peers_file);
 	return 0;
+}
+
+/**
+ * Fetch pointers to peers with specific flags set, into array that is being
+ * allocated in here.
+ *
+ * @param	peers		All peers known to us.
+ * @param	output		Output array of pointers to satisfying peers.
+ *				If set to NULL, function just returns
+ *				the number of them.
+ * @param	flags		Choose peers based on these flags.
+ *				Fetches output with all known peers if set to 0.
+ *
+ * @return	>=0		The number of satisfying peers.
+ * @return	-1		Allocation failure.
+ */
+int fetch_specific_peers(const linkedlist_t	*peers,
+			 peer_t			***output,
+			 int			flags)
+{
+	linkedlist_node_t	*current_node;
+	peer_t			*current_peer;
+	size_t			n = 0;
+
+	if (output != NULL) {
+		*output = (peer_t **) malloc(linkedlist_size(peers) *
+					    sizeof(peer_t *));
+		if (*output == NULL) {
+			log_error("Fetching specific peers");
+			return -1;
+		}
+	}
+
+	current_node = linkedlist_get_first(peers);
+	while (current_node != NULL) {
+		current_peer = (peer_t *) current_node->data;
+		/* if all specified flags are being set on this peer */
+		if ((current_peer->flags & flags) == flags) {
+			if (output != NULL) {
+				(*output)[n++] = current_peer;
+			} else {
+				n++;
+			}
+		}
+		current_node = linkedlist_get_next(peers, current_node);
+	}
+
+	return n;
 }
 
 /**
@@ -130,7 +143,7 @@ peer_t *find_peer_by_addr(const linkedlist_t	*peers,
 
 /* TODO: allocate memory for the 'output', don't assume any buffer size */
 /**
- * '\n' separated 'output' of peer addresses in readable form from 'peers'.
+ * '\n' separated output string of peer addresses in readable form.
  *
  * @param	peers	List of peers.
  * @param	output	Output string.
@@ -165,36 +178,16 @@ void peers_to_str(const linkedlist_t *peers, char *output)
 }
 
 /**
- * Set all peers as available. Definition of availability
- * is within peer_t in peers.h.
- *
- * @param	peers	The peers to be set as available.
- */
-void reset_peers_availability(linkedlist_t *peers)
-{
-	linkedlist_node_t	*current_node;
-	peer_t			*current_peer;
-
-	current_node = linkedlist_get_first(peers);
-	while (current_node != NULL) {
-		current_peer = (peer_t *) current_node->data;
-
-		current_peer->is_available = 1;
-		current_node = linkedlist_get_next(peers, current_node);
-	}
-}
-
-/**
  * Save new peer into sorted linkedlist of peers.
  *
  * @param	peers			The linkedlist of peers.
  * @param	addr			Address of the new peer.
  *
- * @return	linkedlist_node_t	Newly added node in the linkedlist.
- * @return	NULL			Peer is already added, default or
+ * @return	peer_t			Newly saved peer.
+ * @return	NULL			Peer is already saved, default or
  *					allocation failure.
  */
-linkedlist_node_t *save_peer(linkedlist_t *peers, const struct in6_addr *addr)
+peer_t *save_peer(linkedlist_t *peers, const struct in6_addr *addr)
 {
 	int			cmp_value;
 	struct in6_addr		curr_addr;
@@ -205,10 +198,10 @@ linkedlist_node_t *save_peer(linkedlist_t *peers, const struct in6_addr *addr)
 	peer_t			*new_peer;
 	char			text_ip[INET6_ADDRSTRLEN];
 
-	/* add peer to the list of known peers, unless it's a default peer */
+	/* save peer to the list of known peers, unless it's a default peer */
 	for (i = 0; i < DEFAULT_PEERS_SIZE; i++) {
 		memcpy(&curr_addr, DEFAULT_PEERS[i], 16);
-		/* it's a default peer, don't add it into 'peers' */
+		/* it's a default peer, don't save it into 'peers' */
 		if (memcmp(&curr_addr, addr, 16) == 0) {
 			return NULL;
 		}
@@ -217,20 +210,20 @@ linkedlist_node_t *save_peer(linkedlist_t *peers, const struct in6_addr *addr)
 	/* allocate memory for a new peer */
 	new_peer = (peer_t *) malloc(sizeof(peer_t));
 	if (new_peer == NULL) {
-		log_error("add_peer - malloc");
+		log_error("Saving new peer");
 		return NULL;
 	}
 
 	/* initialize all attributes of the new peer */
 	memcpy(&new_peer->addr, addr, 16);
-	new_peer->is_available = 1;
+	set_peer_flags(new_peer, PEER_AVAILABLE);
 
 	/* get textual representation of 'addr' */
 	inet_ntop(AF_INET6, addr, text_ip, INET6_ADDRSTRLEN);
 
 	/* insert 'new_peer' to its proper position in the sorted linkedlist;
 	 * start from the last node of 'peers', as 'fetch_peers' (using this
-	 * function) is likely to add in ascending order => better performance
+	 * function) is likely to save in ascending order => better performance
 	 */
 	current_node = linkedlist_get_last(peers);
 	while (current_node != NULL) {
@@ -247,40 +240,54 @@ linkedlist_node_t *save_peer(linkedlist_t *peers, const struct in6_addr *addr)
 							   current_node,
 							   new_peer);
 			if (new_node != NULL) {
-				log_debug("add_peer - %s successfully added",
+				log_debug("save_peer - %s successfully saved",
 					  text_ip);
 			}
-			return new_node;
+			return new_peer;
 		}
 		current_node = linkedlist_get_prev(peers, current_node);
 	}
 	/* the new peer's addr is lexicographically the lowest */
 	new_node = linkedlist_insert_after(peers, &peers->first, new_peer);
 	if (new_node != NULL) {
-		log_debug("add_peer - %s successfully added", text_ip);
+		log_debug("save_peer - %s successfully saved", text_ip);
 	}
-	return new_node;
+
+	return new_peer;
 }
 
 /**
- * Shuffle the input array of peers.
+ * Set flags on given peer.
  *
- * @param	peers		The peers to be shuffled.
- * @param	peers_size	Number of peers to be shuffled.
+ * @param	peer	Set flags on this peer.
+ * @param	flags	Set these flags on the peer.
  */
-void shuffle_peers_arr(peer_t *peers[MAX_PEERS_SIZE], size_t peers_size)
+void set_peer_flags(peer_t *peer, int flags)
 {
-	size_t	i;
-	size_t	idx;
+	peer->flags |= flags;
+}
+
+/**
+ * Shuffle an input array of peers.
+ *
+ * @param	peers		The array of peers to be shuffled.
+ * @param	peers_size	The number of peers to be shuffled.
+ */
+void shuffle_peers_arr(peer_t **peers, size_t peers_size)
+{
+	size_t	i, j;
 	peer_t	*tmp;
 
 	for (i = 0; i < peers_size; i++) {
-		/* don't swap with already swapped */
-		idx = i + rand() % (peers_size - i);
+		/* don't swap with already swapped;
+		 * swapping peers[i] with peers[j], where j is a random index
+		 * such that j >= i AND j < peers_size
+		 */
+		j = i + rand() % (peers_size - i);
 
 		tmp = peers[i];
-		peers[i] = peers[idx];
-		peers[idx] = tmp;
+		peers[i] = peers[j];
+		peers[j] = tmp;
 	}
 }
 
@@ -301,20 +308,36 @@ int store_peers(const char *peers_path, const linkedlist_t *peers)
 
 	peers_file = fopen(peers_path, "wb");
 	if (peers_file == NULL) {
-		log_error("store_peers - unable to create %s", peers_path);
+		log_error("Can not create peers file at %s", peers_path);
 		return 1;
 	}
 
 	current = linkedlist_get_first(peers);
 	while (current != NULL) {
 		current_peer = (peer_t *) current->data;
-		fwrite(&current_peer->addr,
-		       sizeof(struct in6_addr),
-		       1,
-		       peers_file);
+		/* if fwrite fails, terminate storing */
+		if (fwrite(&current_peer->addr,
+			   sizeof(struct in6_addr),
+			   1,
+			   peers_file) != 1) {
+			log_error("Storing peers");
+			fclose(peers_file);
+			return 1;
+		}
 		current = linkedlist_get_next(peers, current);
 	}
 
 	fclose(peers_file);
 	return 0;
+}
+
+/**
+ * Unset flags on given peer.
+ *
+ * @param	peer	Unset flags on this peer.
+ * @param	flags	Unset these flags on the peer.
+ */
+void unset_peer_flags(peer_t *peer, int flags)
+{
+	peer->flags &= ~flags;
 }

@@ -56,13 +56,15 @@ int main(void)
 	global_state_t		global_state;
 	struct evconnlistener	*listener;
 	struct event		*sigint_event;
-	time_t			t;
+	struct event		*sigterm_event;
 
-	srand((unsigned) time(&t));
+	/* TODO: use randombytes (from libsodium?) for the seed of randomness */
+	srand((unsigned) time(NULL));
 
 	/* initialize all global_state variables */
 	global_state.event_loop	= NULL;
 	if (setup_paths(&global_state.filepaths)) {
+		log_error("Initializing paths to needed files/dirs");
 		return 1;
 	}
 
@@ -70,13 +72,12 @@ int main(void)
 	linkedlist_init(&global_state.neighbours);
 	linkedlist_init(&global_state.peers);
 
-	if (fetch_peers(global_state.filepaths.peers, &global_state.peers)) {
-		return 2;
-	}
+	fetch_peers(global_state.filepaths.peers, &global_state.peers);
 
 	/* setup everything needed for TCP listening */
 	if (listen_init(&listener, &global_state) != 0) {
-		return 3;
+		log_error("Initialization of TCP listening");
+		return 2;
 	}
 
 	/* register SIGINT event to its callback */
@@ -85,8 +86,18 @@ int main(void)
 				    signal_cb,
 				    &global_state);
 	if (!sigint_event || event_add(sigint_event, NULL) < 0) {
-		log_error("main - couldn't create or add SIGINT event");
-		return 4;
+		log_error("Creating or adding SIGINT event");
+		return 3;
+	}
+
+	/* register SIGTERM event too */
+	sigterm_event = evsignal_new(global_state.event_loop,
+				     SIGTERM,
+				     signal_cb,
+				     &global_state);
+	if (!sigterm_event || event_add(sigterm_event, NULL) < 0) {
+		log_error("Creating or adding SIGTERM event");
+		return 3;
 	}
 
 	/* setup a function that actively checks the number of neighbours */
@@ -99,8 +110,8 @@ int main(void)
 				conns_cb,
 				&global_state);
 	if (!conns_event || event_add(conns_event, &conns_interval) < 0) {
-		log_error("main - couldn't create or add conns_event");
-		return 4;
+		log_error("Creating or adding Connections event");
+		return 3;
 	}
 
 	/* initiate joining the coincer network */
@@ -119,6 +130,7 @@ int main(void)
 
 	evconnlistener_free(listener);
 	event_free(sigint_event);
+	event_free(sigterm_event);
 	event_free(conns_event);
 	event_base_free(global_state.event_loop);
 

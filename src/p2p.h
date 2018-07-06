@@ -49,8 +49,6 @@ typedef struct s_global_state {
 
 void add_more_connections(global_state_t *global_state, size_t conns_amount);
 
-void ask_for_peers(neighbour_t *neighbour);
-
 int connect_to_addr(global_state_t		*global_state,
 		    const struct in6_addr	*addr);
 

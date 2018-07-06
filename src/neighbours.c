@@ -128,6 +128,54 @@ void delete_neighbour(linkedlist_t *neighbours, struct bufferevent *bev)
 }
 
 /**
+ * Fetch pointers to neighbours with specific flags set, into an array
+ * that is being allocated in here.
+ *
+ * @param	neighbours	Our neighbours.
+ * @param	output		Output array of pointers to satisfying
+ *				neighbours. If set to NULL, function just
+ *				returns the number of them.
+ * @param	flags		Choose neighbours based on these flags.
+ *				Fetches output with all neighbours if set to 0.
+ *
+ * @return	>=0		The number of satisfying neighbours.
+ * @return	-1		Allocation failure.
+ */
+int fetch_specific_neighbours(const linkedlist_t	*neighbours,
+			      neighbour_t		***output,
+			      int			flags)
+{
+	linkedlist_node_t	*current_node;
+	neighbour_t		*current_neighbour;
+	size_t			n = 0;
+
+	if (output != NULL) {
+		*output = (neighbour_t **) malloc(linkedlist_size(neighbours) *
+						  sizeof(neighbour_t *));
+		if (*output == NULL) {
+			log_error("Fetching specific neighbours");
+			return -1;
+		}
+	}
+
+	current_node = linkedlist_get_first(neighbours);
+	while (current_node != NULL) {
+		current_neighbour = (neighbour_t *) current_node->data;
+		/* if all specified flags are being set on this neighbour */
+		if ((current_neighbour->flags & flags) == flags) {
+			if (output != NULL) {
+				(*output)[n++] = current_neighbour;
+			} else {
+				n++;
+			}
+		}
+		current_node = linkedlist_get_next(neighbours, current_node);
+	}
+
+	return n;
+}
+
+/**
  * Find neighbour in neighbours based on their bufferevent.
  *
  * @param	neighbours	Our neighbours.
@@ -148,7 +196,6 @@ neighbour_t *find_neighbour(const linkedlist_t		*neighbours,
 
 		/* bufferevents equal => neighbour found */
 		if (current_data->buffer_event == bev) {
-
 			/* return node's data; struct s_neighbour */
 			return current_data;
 		}
@@ -188,4 +235,26 @@ neighbour_t *find_neighbour_by_addr(const linkedlist_t		*neighbours,
 	}
 	/* neighbour not found */
 	return NULL;
+}
+
+/**
+ * Set flags on given neighbour.
+ *
+ * @param	neighbour	Set flags on this neighbour.
+ * @param	flags		Set these flags on the neighbour.
+ */
+void set_neighbour_flags(neighbour_t *neighbour, int flags)
+{
+	neighbour->flags |= flags;
+}
+
+/**
+ * Unset flags on given neighbour.
+ *
+ * @param	neighbour	Unset flags on this neighbour.
+ * @param	flags		Unset these flags on the neighbour.
+ */
+void unset_neighbour_flags(neighbour_t *neighbour, int flags)
+{
+	neighbour->flags &= ~flags;
 }

@@ -48,12 +48,12 @@ static void ip_to_string(const struct in6_addr *binary_ip, char *ip)
 }
 
 /**
- * Ask the neighbour for a list of peers.
+ * Ask the neighbour for a list of addresses.
  *
  * @param	global_state	Data for the event loop to work with.
  * @param	neighbour	The neighbour to be asked.
  */
-void ask_for_peers(neighbour_t *neighbour)
+static void ask_for_addresses(neighbour_t *neighbour)
 {
 	struct bufferevent *bev;
 
@@ -64,6 +64,8 @@ void ask_for_peers(neighbour_t *neighbour)
 	/* send message "peers" to the neighbour, as a request
 	 * for the list of peers; 6 is the number of bytes to be transmitted */
 	evbuffer_add(bufferevent_get_output(bev), "peers", 6);
+	/* accept addresses only from those neighbours that we've asked */
+	set_neighbour_flags(neighbour, NEIGHBOUR_ADDRS_REQ);
 }
 
 /**
@@ -125,6 +127,10 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 
 	/* allocate memory for the input message including '\0' */
 	message = (char *) malloc((len + 1) * sizeof(char));
+	if (message == NULL) {
+		log_error("Received message allocation");
+		return;
+	}
 
 	/* drain input buffer into data; -1 if evbuffer_remove failed */
 	if (evbuffer_remove(input, message, len) == -1) {
@@ -147,9 +153,12 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 	/* "peers" is a request for list of addresses */
 	} else if (strcmp(message, "peers") == 0) {
 		peers_to_str(&global_state->peers, response);
-	/* list of peers */
+	/* list of addresses */
 	} else {
-		process_peers(global_state, message);
+		if (neighbour->flags & NEIGHBOUR_ADDRS_REQ) {
+			process_peers(global_state, message);
+			unset_neighbour_flags(neighbour, NEIGHBOUR_ADDRS_REQ);
+		}
 	}
 
 	if (response[0] != '\0') {
@@ -192,9 +201,7 @@ static void timeout_process(linkedlist_t	*neighbours,
 
 		neighbour->failed_pings++;
 	} else {
-		log_info("timeout_process - 3 failed pings."
-			 " Removing %s from neighbours",
-			 text_ip);
+		log_info("%s timed out", text_ip);
 		delete_neighbour(neighbours, neighbour->buffer_event);
 	}
 }
@@ -239,20 +246,22 @@ static void process_pending_neighbour(global_state_t	*global_state,
 				      neighbour_t	*neighbour,
 				      short		events)
 {
-	size_t		available_peers_size;
+	int		available_peers_size;
 	int		needed_conns;
 	neighbour_t	*new_neighbour;
 	char		text_ip[INET6_ADDRSTRLEN];
 
-	available_peers_size = fetch_available_peers(&global_state->peers,
-						     NULL);
+	/* fetch peers with PEER_AVAILABLE flag set;
+	 * no allocation with NULL parameter -> result always >=0 */
+	available_peers_size = fetch_specific_peers(&global_state->peers,
+						    NULL,
+						    PEER_AVAILABLE);
 	/* initialize text_ip */
 	ip_to_string(&neighbour->addr, text_ip);
 
 	/* we've successfully connected to the neighbour */
 	if (events & BEV_EVENT_CONNECTED) {
-		log_info("process_pending_neighbour - connecting to "
-			 "%s was SUCCESSFUL", text_ip);
+		log_info("%s successfully connected", text_ip);
 		/* we've got a new neighbour;
 		 * we can't just delete the neighbour from pending
 		 * and add it into 'neighbours' as the delete would
@@ -268,14 +277,14 @@ static void process_pending_neighbour(global_state_t	*global_state,
 		/* if we need more neighbours */
 		if (needed_conns > 0) {
 			/* and we don't have enough available */
-			if ((int) available_peers_size < needed_conns) {
+			if (available_peers_size < needed_conns) {
 				ask_for_addresses(new_neighbour);
 			}
 		}
 	/* connecting to the neighbour was unsuccessful */
 	} else {
-		log_info("process_pending_neighbour - connecting to "
-			 "%s was NOT SUCCESSFUL", text_ip);
+		log_debug("process_pending_neighbour - connecting to "
+			  "%s was unsuccessful", text_ip);
 		/* the peer is no longer a pending neighbour */
 		delete_neighbour(&global_state->pending_neighbours,
 				 neighbour->buffer_event);
@@ -299,12 +308,11 @@ static void process_neighbour(global_state_t	*global_state,
 	ip_to_string(&neighbour->addr, text_ip);
 
 	if (events & BEV_EVENT_ERROR) {
-		log_info("process_neighbour - error on bev: removing %s",
-			 text_ip);
+		log_info("Connection error, removing %s", text_ip);
 		delete_neighbour(&global_state->neighbours,
 				 neighbour->buffer_event);
 	} else if (events & BEV_EVENT_EOF) {
-		log_info("process_neighbour - %s disconnected", text_ip);
+		log_info("%s disconnected", text_ip);
 		delete_neighbour(&global_state->neighbours,
 				 neighbour->buffer_event);
 	/* timeout flag on 'bev' */
@@ -357,6 +365,7 @@ static void accept_connection(struct evconnlistener *listener,
 	struct event_base	*base;
 	struct bufferevent	*bev;
 	struct in6_addr		*new_addr;
+	peer_t			*new_peer;
 	char			text_ip[INET6_ADDRSTRLEN];
 	struct timeval		timeout;
 
@@ -402,9 +411,12 @@ static void accept_connection(struct evconnlistener *listener,
 		return;
 	}
 
-	log_info("accept_connection - new connection from [%s]:%d", text_ip,
+	log_info("New connection from [%s]:%d", text_ip,
 		ntohs(addr_in6->sin6_port));
-	save_peer(&global_state->peers, new_addr);
+	if ((new_peer = save_peer(&global_state->peers, new_addr))) {
+		/* we are now connected to this peer, hence unavailable */
+		unset_peer_flags(new_peer, PEER_AVAILABLE);
+	}
 }
 
 /**
@@ -420,8 +432,10 @@ static void accept_error_cb(struct evconnlistener *listener,
 	global_state_t *global_state = (struct s_global_state *) ctx;
 
 	int err = EVUTIL_SOCKET_ERROR();
-	log_error("accept_error_cb - got an error %d (%s) on the listener. "
-		  "Shutting down.", err, evutil_socket_error_to_string(err));
+
+	/* TODO: If we have enough connections, don't stop the event loop */
+	log_error("Error %d (%s) on the listener, shutting down",
+		  err, evutil_socket_error_to_string(err));
 
 	/* stop the event loop */
 	event_base_loopexit(base, NULL);
@@ -449,7 +463,7 @@ int listen_init(struct evconnlistener 	**listener,
 
 	*base = event_base_new();
 	if (!*base) {
-		log_error("listen_init - event_base creation failure");
+		log_error("Creating eventbase");
 		return 1;
 	}
 
@@ -467,7 +481,7 @@ int listen_init(struct evconnlistener 	**listener,
 					    sizeof(sock_addr));
 
 	if (!*listener) {
-		log_error("listen_init - evconnlistener_new_bind");
+		log_error("Creating listener");
 		return 1;
 	}
 
@@ -558,7 +572,7 @@ int connect_to_addr(global_state_t		*global_state,
 
 	peer = find_peer_by_addr(&global_state->peers, addr);
 	if (peer != NULL) {
-		peer->is_available = 0;
+		unset_peer_flags(peer, PEER_AVAILABLE);
 	}
 
 	/* connect to the peer; socket_connect also assigns fd */
@@ -576,16 +590,22 @@ int connect_to_addr(global_state_t		*global_state,
 void add_more_connections(global_state_t *global_state, size_t conns_amount)
 {
 	struct in6_addr	addr;
-	size_t		available_peers_size;
-	peer_t		*available_peers[MAX_PEERS_SIZE];
+	int		available_peers_size;
+	peer_t		**available_peers;
 	size_t		cur_conn_attempts = 0;
 	size_t		idx;
 	neighbour_t	*neigh;
 	size_t		result;
 	peer_t		*selected_peer;
 
-	available_peers_size = fetch_available_peers(&global_state->peers,
-						     available_peers);
+	available_peers_size = fetch_specific_peers(&global_state->peers,
+						    &available_peers,
+						    PEER_AVAILABLE);
+	/* if fetch_specific_peers had allocation failure */
+	if (available_peers_size == -1) {
+		log_error("Adding more connections");
+		return;
+	}
 
 	/* only if we don't have any non-default peers available */
 	if (available_peers_size == 0) {
@@ -613,7 +633,7 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 						       neighbours,
 						       &addr);
 			assert(neigh != NULL);
-			ask_for_peers(neigh);
+			ask_for_addresses(neigh);
 			log_debug("add_more_connections - "
 				  "asking for peers");
 		/* the peer is a pending connection */
@@ -630,7 +650,7 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 		/* we need to choose 'conns_amount' of random connections */
 		shuffle_peers_arr(available_peers, available_peers_size);
 		/* clamp to 'available_peers_size' */
-		if (conns_amount > available_peers_size) {
+		if (conns_amount > (size_t) available_peers_size) {
 			conns_amount = available_peers_size;
 		}
 
@@ -643,5 +663,6 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 			cur_conn_attempts++;
 		}
 	}
-}
 
+	free(available_peers);
+}
