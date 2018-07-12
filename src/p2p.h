@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,23 +20,39 @@
 #define P2P_H
 
 #include <event2/event.h>
+#include <netinet/in.h>
 
 #include "linkedlist.h"
+#include "neighbours.h"
+#include "paths.h"
 
+/* default port for TCP listening */
 #define	DEFAULT_PORT	31070
-/* after (READ/WRITE)_TIMEOUT seconds invoke timeout callback */
-#define READ_TIMEOUT 	30
-#define WRITE_TIMEOUT 	30
+/* after TIMEOUT_TIME seconds invoke timeout callback */
+#define	TIMEOUT_TIME 	30
 
 /**
  * Event loop works with the data stored in an instance of this struct.
  */
 typedef struct s_global_state {
-	struct event_base *event_loop; /**< For holding and polling events. */
-	linkedlist_t neighbours; /**< Linked list of our neighbours. */
+	/** For holding and polling events. */
+	struct event_base *event_loop;
+	/** Holder of paths to needed files/dirs. */
+	filepaths_t filepaths;
+	/** Linked list of our neighbours. */
+	linkedlist_t neighbours;
+	/** Linked list of some peers in the network. */
+	linkedlist_t peers;
+	/** Peers that didn't accept/reject us yet. */
+	linkedlist_t pending_neighbours;
 } global_state_t;
 
-int listen_init(struct evconnlistener **listener,
-		struct s_global_state *global_state);
+void add_more_connections(global_state_t *global_state, size_t conns_amount);
+
+int connect_to_addr(global_state_t		*global_state,
+		    const struct in6_addr	*addr);
+
+int listen_init(struct evconnlistener	**listener,
+		global_state_t		*global_state);
 
 #endif /* P2P_H */

@@ -1,6 +1,6 @@
 /*
  *  Coincer
- *  Copyright (C) 2017  Coincer Developers
+ *  Copyright (C) 2017-2018  Coincer Developers
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,8 @@
 #ifndef LINKEDLIST_H
 #define LINKEDLIST_H
 
+#include <stdint.h>
+
 /**
  * Node of the linked list structure.
  */
@@ -36,7 +38,13 @@ typedef struct s_linkedlist {
 	struct s_linkedlist_node	last; /**< Auxiliary last node. */
 } linkedlist_t;
 
-void linkedlist_init(linkedlist_t *root);
+linkedlist_node_t *linkedlist_append(linkedlist_t *root, void *data);
+
+void linkedlist_delete(linkedlist_node_t *node);
+
+void linkedlist_destroy(linkedlist_t *root);
+
+linkedlist_node_t *linkedlist_find(const linkedlist_t *root, const void *data);
 
 linkedlist_node_t *linkedlist_get_first(const linkedlist_t *root);
 
@@ -45,12 +53,19 @@ linkedlist_node_t *linkedlist_get_last(const linkedlist_t *root);
 linkedlist_node_t *linkedlist_get_next(const linkedlist_t	*root,
 				       const linkedlist_node_t	*node);
 
-void linkedlist_destroy(linkedlist_t *root);
+linkedlist_node_t *linkedlist_get_prev(const linkedlist_t	*root,
+				       const linkedlist_node_t	*node);
 
-linkedlist_node_t *linkedlist_append(linkedlist_t *root, void *data);
+void linkedlist_init(linkedlist_t *root);
 
-void linkedlist_delete(linkedlist_t *root, linkedlist_node_t *node);
+linkedlist_node_t *linkedlist_insert_after(linkedlist_t		*root,
+					   linkedlist_node_t	*node,
+					   void			*data);
 
-linkedlist_node_t *linkedlist_find(const linkedlist_t *root, const void *data);
+linkedlist_node_t *linkedlist_insert_before(linkedlist_t	*root,
+					    linkedlist_node_t	*node,
+					    void		*data);
+
+size_t linkedlist_size(const linkedlist_t *root);
 
 #endif /* LINKEDLIST_H */
