@@ -5,6 +5,8 @@ bin_PROGRAMS = src/coincerd src/coincer
 src_coincerd_SOURCES = \
 	src/coincerd.c \
 	src/configuration.c src/configuration.h \
+	src/daemon_messages.h \
+	src/json_parser.c src/json_parser.h \
 	src/linkedlist.c src/linkedlist.h \
 	src/log.c src/log.h \
 	src/neighbours.c src/neighbours.h \

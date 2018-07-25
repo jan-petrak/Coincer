@@ -19,6 +19,7 @@
 #include <event2/event.h>
 #include <event2/listener.h>
 #include <signal.h>
+#include <sodium.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -57,6 +58,11 @@ int main(void)
 	struct evconnlistener	*listener;
 	struct event		*sigint_event;
 	struct event		*sigterm_event;
+
+	if (sodium_init() < 0) {
+		log_error("Libsodium failed to initialize");
+		return 4;
+	}
 
 	/* TODO: use randombytes (from libsodium?) for the seed of randomness */
 	srand((unsigned) time(NULL));
