@@ -21,20 +21,19 @@
 #include <arpa/inet.h>		/* inet_ntop */
 #include <assert.h>
 #include <errno.h>
-#include <event2/listener.h>
-#include <event2/bufferevent.h>
 #include <event2/buffer.h>
+#include <event2/bufferevent.h>
+#include <event2/listener.h>
 #include <netinet/in.h>		/* sockaddr_in6 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>		/* sleep */
 
+#include "hosts.h"
 #include "linkedlist.h"
 #include "log.h"
 #include "neighbours.h"
 #include "p2p.h"
-#include "peers.h"
 
 /**
  * Simple helper for conversion of binary IP to readable IP address.
@@ -48,7 +47,7 @@ static void ip_to_string(const struct in6_addr *binary_ip, char *ip)
 }
 
 /**
- * Ask the neighbour for a list of addresses.
+ * Ask a neighbour for a list of addresses.
  *
  * @param	global_state	Data for the event loop to work with.
  * @param	neighbour	The neighbour to be asked.
@@ -61,31 +60,31 @@ static void ask_for_addresses(neighbour_t *neighbour)
 		return;
 	}
 
-	/* send message "peers" to the neighbour, as a request
-	 * for the list of peers; 6 is the number of bytes to be transmitted */
-	evbuffer_add(bufferevent_get_output(bev), "peers", 6);
+	/* send message "hosts" to the neighbour, as a request
+	 * for the list of hosts; 6 is the number of bytes to be transmitted */
+	evbuffer_add(bufferevent_get_output(bev), "hosts", 6);
 	/* accept addresses only from those neighbours that we've asked */
 	set_neighbour_flags(neighbour, NEIGHBOUR_ADDRS_REQ);
 }
 
 /**
- * Process received list of peer addresses.
+ * Process received list of host addresses.
  *
  * @param	global_state	Data for the event loop to work with.
- * @param	peers		'\n'-separated list of peer addresses.
+ * @param	hosts		'\n'-separated list of host addresses.
  */
-static void process_peers(global_state_t *global_state, char *peers)
+static void process_hosts(global_state_t *global_state, char *hosts)
 {
 	struct in6_addr	addr;
 	const char	delim[2] = "\n";
 	char		*line;
 	char		*save_ptr;
 
-	line = strtok_r(peers, delim, &save_ptr);
+	line = strtok_r(hosts, delim, &save_ptr);
 
 	while (line != NULL) {
 		if (inet_pton(AF_INET6, line, &addr) == 1) {
-			save_peer(&global_state->peers, &addr);
+			save_host(&global_state->hosts, &addr);
 		}
 		line = strtok_r(NULL, delim, &save_ptr);
 	}
@@ -150,13 +149,13 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 		strcpy(response, "pong");
 	/* ignore "pong" */
 	} else if (strcmp(message, "pong") == 0) {
-	/* "peers" is a request for list of addresses */
-	} else if (strcmp(message, "peers") == 0) {
-		peers_to_str(&global_state->peers, response);
+	/* "hosts" is a request for list of addresses */
+	} else if (strcmp(message, "hosts") == 0) {
+		hosts_to_str(&global_state->hosts, response);
 	/* list of addresses */
 	} else {
 		if (neighbour->flags & NEIGHBOUR_ADDRS_REQ) {
-			process_peers(global_state, message);
+			process_hosts(global_state, message);
 			unset_neighbour_flags(neighbour, NEIGHBOUR_ADDRS_REQ);
 		}
 	}
@@ -172,7 +171,7 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 }
 
 /**
- * Process the timeout invoked by event_cb.
+ * Process a timeout invoked by event_cb.
  *
  * @param	neighbours	Linked list of neighbours.
  * @param	neighbour	Timeout invoked on this neighbour.
@@ -207,7 +206,7 @@ static void timeout_process(linkedlist_t	*neighbours,
 }
 
 /**
- * Delete neighbour from pending and add it into neighbours.
+ * Delete a neighbour from pending neighbours and add it into neighbours.
  *
  * @param	global_state	Global state.
  * @param	neighbour	Neighbour to be moved.
@@ -246,16 +245,16 @@ static void process_pending_neighbour(global_state_t	*global_state,
 				      neighbour_t	*neighbour,
 				      short		events)
 {
-	int		available_peers_size;
+	int		available_hosts_size;
 	int		needed_conns;
 	neighbour_t	*new_neighbour;
 	char		text_ip[INET6_ADDRSTRLEN];
 
-	/* fetch peers with PEER_AVAILABLE flag set;
+	/* fetch hosts with HOST_AVAILABLE flag set;
 	 * no allocation with NULL parameter -> result always >=0 */
-	available_peers_size = fetch_specific_peers(&global_state->peers,
+	available_hosts_size = fetch_specific_hosts(&global_state->hosts,
 						    NULL,
-						    PEER_AVAILABLE);
+						    HOST_AVAILABLE);
 	/* initialize text_ip */
 	ip_to_string(&neighbour->addr, text_ip);
 
@@ -277,7 +276,7 @@ static void process_pending_neighbour(global_state_t	*global_state,
 		/* if we need more neighbours */
 		if (needed_conns > 0) {
 			/* and we don't have enough available */
-			if (available_peers_size < needed_conns) {
+			if (available_hosts_size < needed_conns) {
 				ask_for_addresses(new_neighbour);
 			}
 		}
@@ -285,7 +284,7 @@ static void process_pending_neighbour(global_state_t	*global_state,
 	} else {
 		log_debug("process_pending_neighbour - connecting to "
 			  "%s was unsuccessful", text_ip);
-		/* the peer is no longer a pending neighbour */
+		/* the host is no longer a pending neighbour */
 		delete_neighbour(&global_state->pending_neighbours,
 				 neighbour->buffer_event);
 	}
@@ -365,7 +364,7 @@ static void accept_connection(struct evconnlistener *listener,
 	struct event_base	*base;
 	struct bufferevent	*bev;
 	struct in6_addr		*new_addr;
-	peer_t			*new_peer;
+	host_t			*new_host;
 	char			text_ip[INET6_ADDRSTRLEN];
 	struct timeval		timeout;
 
@@ -413,9 +412,9 @@ static void accept_connection(struct evconnlistener *listener,
 
 	log_info("New connection from [%s]:%d", text_ip,
 		ntohs(addr_in6->sin6_port));
-	if ((new_peer = save_peer(&global_state->peers, new_addr))) {
-		/* we are now connected to this peer, hence unavailable */
-		unset_peer_flags(new_peer, PEER_AVAILABLE);
+	if ((new_host = save_host(&global_state->hosts, new_addr))) {
+		/* we are now connected to this host, hence unavailable */
+		unset_host_flags(new_host, HOST_AVAILABLE);
 	}
 }
 
@@ -494,18 +493,18 @@ int listen_init(struct evconnlistener 	**listener,
  * Attempt to connect to a particular addr.
  *
  * @param	global_state	Data for the event loop to work with.
- * @param	addr		Binary IP of a peer that we want to connect to.
+ * @param	addr		Binary IP of a host that we want to connect to.
  *
  * @return	0		The connection attempt was successful.
- * @return	1		The peer is already our neighbour.
- * @return	2		The peer is pending to become our neighbour.
+ * @return	1		The host is already our neighbour.
+ * @return	2		The host is pending to become our neighbour.
  * @return	3		Adding new pending neighbour unsuccessful.
  */
 int connect_to_addr(global_state_t		*global_state,
 		    const struct in6_addr	*addr)
 {
 	struct bufferevent	*bev;
-	peer_t			*peer;
+	host_t			*host;
 	struct sockaddr		*sock_addr;
 	struct sockaddr_in6	sock_addr6;
 	int			sock_len;
@@ -515,15 +514,15 @@ int connect_to_addr(global_state_t		*global_state,
 	/* get textual representation of the input ip address */
 	ip_to_string(addr, text_ip);
 
-	/* don't connect to already connected peer */
+	/* don't connect to already connected host */
 	if (find_neighbour_by_addr(&global_state->neighbours, addr) != NULL) {
-		log_debug("connect_to_addr - peer already connected");
+		log_debug("connect_to_addr - host already connected");
 		return 1;
 	}
 
 	/* don't attempt to connect to already pending connection */
 	if (linkedlist_find(&global_state->pending_neighbours, addr) != NULL) {
-		log_debug("connect_to_addr - peer is in the pending conns");
+		log_debug("connect_to_addr - host is in the pending conns");
 		return 2;
 	}
 
@@ -558,8 +557,8 @@ int connect_to_addr(global_state_t		*global_state,
 	/* after TIMEOUT_TIME seconds invoke event_cb */
 	bufferevent_set_timeouts(bev, &timeout, &timeout);
 
-	/* add peer to the list of pending neighbours and let event_cb
-	 * determine whether the peer is our neighbour now */
+	/* add host to the list of pending neighbours and let event_cb
+	 * determine whether the host is our neighbour now */
 	if (!add_new_neighbour(&global_state->pending_neighbours, addr, bev)) {
 		log_debug("connect_to_addr - neighbour %s NOT ADDED into "
 			  "pending neighbours", text_ip);
@@ -570,19 +569,19 @@ int connect_to_addr(global_state_t		*global_state,
 			  "pending neighbours", text_ip);
 	}
 
-	peer = find_peer_by_addr(&global_state->peers, addr);
-	if (peer != NULL) {
-		unset_peer_flags(peer, PEER_AVAILABLE);
+	host = find_host_by_addr(&global_state->hosts, addr);
+	if (host != NULL) {
+		unset_host_flags(host, HOST_AVAILABLE);
 	}
 
-	/* connect to the peer; socket_connect also assigns fd */
+	/* connect to the host; socket_connect also assigns fd */
 	bufferevent_socket_connect(bev, sock_addr, sock_len);
 
 	return 0;
 }
 
 /**
- * Attempt to connect to more peers.
+ * Attempt to connect to more hosts.
  *
  * @param	global_state	Data for the event loop to work with.
  * @param	conns_amount	Prefered number of new connections.
@@ -590,44 +589,44 @@ int connect_to_addr(global_state_t		*global_state,
 void add_more_connections(global_state_t *global_state, size_t conns_amount)
 {
 	struct in6_addr	addr;
-	int		available_peers_size;
-	peer_t		**available_peers;
+	int		available_hosts_size;
+	host_t		**available_hosts;
 	size_t		cur_conn_attempts = 0;
 	size_t		idx;
 	neighbour_t	*neigh;
 	size_t		result;
-	peer_t		*selected_peer;
+	host_t		*selected_host;
 
-	available_peers_size = fetch_specific_peers(&global_state->peers,
-						    &available_peers,
-						    PEER_AVAILABLE);
-	/* if fetch_specific_peers had allocation failure */
-	if (available_peers_size == -1) {
+	available_hosts_size = fetch_specific_hosts(&global_state->hosts,
+						    &available_hosts,
+						    HOST_AVAILABLE);
+	/* if fetch_specific_hosts had allocation failure */
+	if (available_hosts_size == -1) {
 		log_error("Adding more connections");
 		return;
 	}
 
-	/* only if we don't have any non-default peers available */
-	if (available_peers_size == 0) {
+	/* only if we don't have any non-default hosts available */
+	if (available_hosts_size == 0) {
 		log_debug("add_more_connections - "
-			  "choosing random default peer");
-		/* choose random default peer */
-		idx = rand() % DEFAULT_PEERS_SIZE;
-		memcpy(&addr, DEFAULT_PEERS[idx], 16);
+			  "choosing random default host");
+		/* choose random default host */
+		idx = rand() % DEFAULT_HOSTS_SIZE;
+		memcpy(&addr, DEFAULT_HOSTS[idx], 16);
 
 		result = connect_to_addr(global_state, &addr);
 		/* the connecting attempt was successful */
 		if (result == 0) {
-			/* if the peer becomes our neighbour,
+			/* if the host becomes our neighbour,
 			 * and we need more connections,
-			 * get a list of peers from them and
+			 * get a list of hosts from them and
 			 * attempt to connect to them;
 			 * it's our goal to use as few
-			 * default peers as possible
+			 * default hosts as possible
 			 */
 			log_debug("add_more_connections - "
 				  "connect attempt succeeded");
-		/* the peer is our neighbour; ask them for more addrs */
+		/* the host is our neighbour; ask them for more addrs */
 		} else if (result == 1) {
 			neigh = find_neighbour_by_addr(&global_state->
 						       neighbours,
@@ -635,8 +634,8 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 			assert(neigh != NULL);
 			ask_for_addresses(neigh);
 			log_debug("add_more_connections - "
-				  "asking for peers");
-		/* the peer is a pending connection */
+				  "asking for hosts");
+		/* the host is a pending connection */
 		} else if (result == 2) {
 			/* wait for them to reject/accept us */
 			log_debug("add_more_connections - "
@@ -645,24 +644,24 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 			log_debug("add_more_connections - "
 				  "connect attempt didn't succeed");
 		}
-	/* we've got some available peers */
+	/* we've got some available hosts */
 	} else {
 		/* we need to choose 'conns_amount' of random connections */
-		shuffle_peers_arr(available_peers, available_peers_size);
-		/* clamp to 'available_peers_size' */
-		if (conns_amount > (size_t) available_peers_size) {
-			conns_amount = available_peers_size;
+		shuffle_hosts_arr(available_hosts, available_hosts_size);
+		/* clamp to 'available_hosts_size' */
+		if (conns_amount > (size_t) available_hosts_size) {
+			conns_amount = available_hosts_size;
 		}
 
 		while (cur_conn_attempts < conns_amount) {
 			idx = cur_conn_attempts;
-			selected_peer = available_peers[idx];
+			selected_host = available_hosts[idx];
 			/* perform a connection attempt */
 			connect_to_addr(global_state,
-					&selected_peer->addr);
+					&selected_host->addr);
 			cur_conn_attempts++;
 		}
 	}
 
-	free(available_peers);
+	free(available_hosts);
 }

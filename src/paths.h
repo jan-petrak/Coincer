@@ -26,8 +26,8 @@ typedef struct s_filepaths {
 	/**< Path to data directory. */
 	char *data_dir;
 
-	/**< Path to file with addresses of peers. */
-	char *peers;
+	/**< Path to file with addresses of hosts. */
+	char *hosts;
 } filepaths_t;
 
 void clear_paths(filepaths_t *filepaths);

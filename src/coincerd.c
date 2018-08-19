@@ -23,11 +23,11 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "hosts.h"
 #include "log.h"
 #include "neighbours.h"
 #include "p2p.h"
 #include "paths.h"
-#include "peers.h"
 
 static void signal_cb(evutil_socket_t fd, short events, void *ctx);
 static void conns_cb(evutil_socket_t fd, short events, void *ctx);
@@ -76,9 +76,9 @@ int main(void)
 
 	linkedlist_init(&global_state.pending_neighbours);
 	linkedlist_init(&global_state.neighbours);
-	linkedlist_init(&global_state.peers);
+	linkedlist_init(&global_state.hosts);
 
-	fetch_peers(global_state.filepaths.peers, &global_state.peers);
+	fetch_hosts(global_state.filepaths.hosts, &global_state.hosts);
 
 	/* setup everything needed for TCP listening */
 	if (listen_init(&listener, &global_state) != 0) {

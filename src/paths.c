@@ -24,31 +24,29 @@
 #include "log.h"
 #include "paths.h"
 
-#define PEERS_FILE_NAME "peers"
+#define HOSTS_FILE_NAME "hosts"
 
 /**
- * Sets path to peers file.
+ * Sets path to hosts file.
  *
  * @param	data_dir	Path to data dir.
- * @param	peers		The file path of peers.
+ * @param	hosts		The file path of hosts.
  *
  * @return	0		Path successfully set.
  * @return	1		Allocation failure.
  */
-static int set_peers_path(char *data_dir, char **peers)
+static int set_hosts_path(char *data_dir, char **hosts)
 {
-	FILE *peers_file;
-
-	/* size of data_dir + PEERS_FILE_NAME */
-	*peers = (char *) malloc(strlen(data_dir) +
-				 sizeof(PEERS_FILE_NAME));
-	if (*peers == NULL) {
-		log_error("set_peers_path - peers file malloc");
+	/* size of data_dir + HOSTS_FILE_NAME */
+	*hosts = (char *) malloc(strlen(data_dir) +
+				 sizeof(HOSTS_FILE_NAME));
+	if (*hosts == NULL) {
+		log_error("Setting hosts path");
 		return 1;
 	}
 
-	strcpy(*peers, data_dir);
-	strcat(*peers, PEERS_FILE_NAME);
+	strcpy(*hosts, data_dir);
+	strcat(*hosts, HOSTS_FILE_NAME);
 
 	return 0;
 }
@@ -68,7 +66,7 @@ int setup_paths(filepaths_t *filepaths)
 		return 1;
 	}
 
-	set_peers_path(filepaths->data_dir, &filepaths->peers);
+	set_hosts_path(filepaths->data_dir, &filepaths->hosts);
 
 	return 0;
 }
@@ -83,5 +81,5 @@ void clear_paths(filepaths_t *filepaths)
 	free(filepaths->config_dir);
 	free(filepaths->data_dir);
 
-	free(filepaths->peers);
+	free(filepaths->hosts);
 }
