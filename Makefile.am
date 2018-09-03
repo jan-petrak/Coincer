@@ -6,7 +6,9 @@ src_coincerd_SOURCES = \
 	src/coincerd.c \
 	src/configuration.c src/configuration.h \
 	src/crypto.c src/crypto.h \
+	src/daemon_events.c src/daemon_events.h \
 	src/daemon_messages.c src/daemon_messages.h \
+	src/global_state.c src/global_state.h \
 	src/hosts.c src/hosts.h \
 	src/json_parser.c src/json_parser.h \
 	src/linkedlist.c src/linkedlist.h \

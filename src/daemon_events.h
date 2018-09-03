@@ -16,25 +16,11 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef P2P_H
-#define P2P_H
-
-#include <event2/listener.h>
-#include <netinet/in.h>
+#ifndef DAEMON_EVENTS_H
+#define DAEMON_EVENTS_H
 
 #include "global_state.h"
 
-/** Default port for TCP listening. */
-#define	DEFAULT_PORT	31070
-/** After TIMEOUT_TIME seconds invoke timeout callback. */
-#define	TIMEOUT_TIME 	30
+int daemon_events_setup(global_state_t *global_state);
 
-void add_more_connections(global_state_t *global_state, size_t conns_amount);
-
-int connect_to_addr(global_state_t		*global_state,
-		    const struct in6_addr	*addr);
-
-int listen_init(struct evconnlistener	**listener,
-		global_state_t		*global_state);
-
-#endif /* P2P_H */
+#endif /* DAEMON_EVENTS_H */

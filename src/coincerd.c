@@ -18,19 +18,13 @@
 
 #include <event2/event.h>
 #include <event2/listener.h>
-#include <signal.h>
 #include <sodium.h>
-#include <stdlib.h>
-#include <time.h>
 
+#include "daemon_events.h"
+#include "global_state.h"
 #include "hosts.h"
 #include "log.h"
-#include "neighbours.h"
 #include "p2p.h"
-#include "paths.h"
-
-static void signal_cb(evutil_socket_t fd, short events, void *ctx);
-static void conns_cb(evutil_socket_t fd, short events, void *ctx);
 
 int main(void)
 {
@@ -52,12 +46,8 @@ int main(void)
 	 * - terminate on SIGTERM
 	 */
 
-	struct event		*conns_event;
-	struct timeval		conns_interval;
 	global_state_t		global_state;
 	struct evconnlistener	*listener;
-	struct event		*sigint_event;
-	struct event		*sigterm_event;
 
 	if (sodium_init() < 0) {
 		log_error("Libsodium failed to initialize");
@@ -67,16 +57,10 @@ int main(void)
 	/* TODO: use randombytes (from libsodium?) for the seed of randomness */
 	srand((unsigned) time(NULL));
 
-	/* initialize all global_state variables */
-	global_state.event_loop	= NULL;
-	if (setup_paths(&global_state.filepaths)) {
-		log_error("Initializing paths to needed files/dirs");
+	if (global_state_init(&global_state)) {
+		log_error("Basic daemon setup");
 		return 1;
 	}
-
-	linkedlist_init(&global_state.pending_neighbours);
-	linkedlist_init(&global_state.neighbours);
-	linkedlist_init(&global_state.hosts);
 
 	fetch_hosts(global_state.filepaths.hosts, &global_state.hosts);
 
@@ -86,37 +70,9 @@ int main(void)
 		return 2;
 	}
 
-	/* register SIGINT event to its callback */
-	sigint_event = evsignal_new(global_state.event_loop,
-				    SIGINT,
-				    signal_cb,
-				    &global_state);
-	if (!sigint_event || event_add(sigint_event, NULL) < 0) {
-		log_error("Creating or adding SIGINT event");
-		return 3;
-	}
-
-	/* register SIGTERM event too */
-	sigterm_event = evsignal_new(global_state.event_loop,
-				     SIGTERM,
-				     signal_cb,
-				     &global_state);
-	if (!sigterm_event || event_add(sigterm_event, NULL) < 0) {
-		log_error("Creating or adding SIGTERM event");
-		return 3;
-	}
-
-	/* setup a function that actively checks the number of neighbours */
-	conns_interval.tv_sec  = 10;
-	conns_interval.tv_usec = 0;
-
-	conns_event = event_new(global_state.event_loop,
-				-1,
-				EV_PERSIST,
-				conns_cb,
-				&global_state);
-	if (!conns_event || event_add(conns_event, &conns_interval) < 0) {
-		log_error("Creating or adding Connections event");
+	/* setup needed daemon events */
+	if (daemon_events_setup(&global_state)) {
+		log_error("Setting up events");
 		return 3;
 	}
 
@@ -126,59 +82,13 @@ int main(void)
 	/* start the event loop */
 	event_base_dispatch(global_state.event_loop);
 
-	/* SIGINT received, loop terminated; the clean-up part */
-	clear_neighbours(&global_state.pending_neighbours);
-	clear_neighbours(&global_state.neighbours);
-	/* store peers into 'peers' file before cleaning them */
-	store_peers(global_state.filepaths.peers, &global_state.peers);
-	clear_peers(&global_state.peers);
-	clear_paths(&global_state.filepaths);
+	/* SIGINT or SIGTERM received, the loop is terminated */
+
+	/* store hosts into 'hosts' file before clearing global_state */
+	store_hosts(global_state.filepaths.hosts, &global_state.hosts);
 
 	evconnlistener_free(listener);
-	event_free(sigint_event);
-	event_free(sigterm_event);
-	event_free(conns_event);
-	event_base_free(global_state.event_loop);
+	global_state_clear(&global_state);
 
 	return 0;
-}
-
-/**
- * Callback function for a received signal.
- *
- * @param	signal	What signal was invoked.
- * @param	events	Flags of the event occurred.
- * @param	ctx	Global state.
- */
-static void signal_cb(evutil_socket_t	signal __attribute__((unused)),
-		      short		events __attribute__((unused)),
-		      void		*ctx)
-{
-	global_state_t *global_state = (global_state_t *) ctx;
-
-	event_base_loopexit(global_state->event_loop, NULL);
-}
-
-/**
- * Actively check the number of neighbours and add more if needed.
- *
- * @param	fd	File descriptor.
- * @param	events	Event flags.
- * @param	ctx	Global state.
- */
-static void conns_cb(int	fd	__attribute__((unused)),
-		     short	events	__attribute__((unused)),
-		     void	*ctx)
-{
-	int needed_conns;
-
-	global_state_t *global_state = (global_state_t *) ctx;
-	needed_conns = MIN_NEIGHBOURS -
-		       linkedlist_size(&global_state->neighbours);
-	if (needed_conns > 0) {
-		log_debug("conns_cb - we need %d more neighbours");
-		/* ask twice more peers than we need; it's preferable
-		 * to have more neighbours than minimum */
-		add_more_connections(global_state, 2 * needed_conns);
-	}
 }
