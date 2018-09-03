@@ -110,8 +110,9 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 	global_state = (global_state_t *) ctx;
 
 	/* find the neighbour based on their bufferevent */
-	neighbour = find_neighbour(&global_state->neighbours, bev);
-
+	neighbour = find_neighbour(&global_state->neighbours,
+				   bev,
+				   compare_neighbour_bufferevents);
 	assert(neighbour != NULL);
 
 	/* reset neighbour's failed pings */
@@ -184,7 +185,7 @@ static void timeout_process(linkedlist_t	*neighbours,
 	/* initialize text_ip */
 	ip_to_string(&neighbour->addr, text_ip);
 
-	/* the neighbour hasn't failed enough pings to be deleted */
+	/* if the neighbour hasn't failed enough pings to be deleted */
 	if (neighbour->failed_pings < 3) {
 		/* bufferevent was disabled when timeout flag was set */
 		bufferevent_enable(neighbour->buffer_event,
@@ -201,37 +202,8 @@ static void timeout_process(linkedlist_t	*neighbours,
 		neighbour->failed_pings++;
 	} else {
 		log_info("%s timed out", text_ip);
-		delete_neighbour(neighbours, neighbour->buffer_event);
+		linkedlist_delete_safely(neighbour->node, clear_neighbour);
 	}
-}
-
-/**
- * Delete a neighbour from pending neighbours and add it into neighbours.
- *
- * @param	global_state	Global state.
- * @param	neighbour	Neighbour to be moved.
- *
- * @param	neighbour_t	The new neighbour added into neighbours.
- * @param	NULL		If adding failed.
- */
-static neighbour_t *move_neighbour_from_pending(global_state_t	*global_state,
-						neighbour_t	*neighbour)
-{
-	linkedlist_node_t	*neighbour_node;
-	neighbour_t		*new_neighbour;
-
-	new_neighbour = add_new_neighbour(&global_state->neighbours,
-					  &neighbour->addr,
-					  neighbour->buffer_event);
-	/* if the add was unsuccessful, perform just the full delete */
-	if (new_neighbour == NULL) {
-		bufferevent_free(neighbour->buffer_event);
-	}
-	neighbour_node = linkedlist_find(&global_state->pending_neighbours,
-					 neighbour);
-	linkedlist_delete(neighbour_node);
-
-	return new_neighbour;
 }
 
 /**
@@ -247,7 +219,6 @@ static void process_pending_neighbour(global_state_t	*global_state,
 {
 	int		available_hosts_size;
 	int		needed_conns;
-	neighbour_t	*new_neighbour;
 	char		text_ip[INET6_ADDRSTRLEN];
 
 	/* fetch hosts with HOST_AVAILABLE flag set;
@@ -261,21 +232,15 @@ static void process_pending_neighbour(global_state_t	*global_state,
 	/* we've successfully connected to the neighbour */
 	if (events & BEV_EVENT_CONNECTED) {
 		log_info("%s successfully connected", text_ip);
-		/* we've got a new neighbour;
-		 * we can't just delete the neighbour from pending
-		 * and add it into 'neighbours' as the delete would
-		 * free'd the bufferevent
-		 */
-		new_neighbour = move_neighbour_from_pending(global_state,
-							    neighbour);
-		if (new_neighbour == NULL) {
-			return;
-		}
+
+		/* move the neighbour from pending into neighbours */
+		linkedlist_move(neighbour->node, &global_state->neighbours);
+
 		needed_conns = MIN_NEIGHBOURS -
 			       linkedlist_size(&global_state->neighbours);
 		/* if we need more neighbours */
 		if (needed_conns > 0) {
-			/* and we don't have enough available */
+			/* and we don't have enough hosts available */
 			if (available_hosts_size < needed_conns) {
 				ask_for_addresses(new_neighbour);
 			}
@@ -285,8 +250,7 @@ static void process_pending_neighbour(global_state_t	*global_state,
 		log_debug("process_pending_neighbour - connecting to "
 			  "%s was unsuccessful", text_ip);
 		/* the host is no longer a pending neighbour */
-		delete_neighbour(&global_state->pending_neighbours,
-				 neighbour->buffer_event);
+		linkedlist_delete_safely(neighbour->node, clear_neighbour);
 	}
 }
 
@@ -308,12 +272,10 @@ static void process_neighbour(global_state_t	*global_state,
 
 	if (events & BEV_EVENT_ERROR) {
 		log_info("Connection error, removing %s", text_ip);
-		delete_neighbour(&global_state->neighbours,
-				 neighbour->buffer_event);
+		linkedlist_delete_safely(neighbour->node, clear_neighbour);
 	} else if (events & BEV_EVENT_EOF) {
 		log_info("%s disconnected", text_ip);
-		delete_neighbour(&global_state->neighbours,
-				 neighbour->buffer_event);
+		linkedlist_delete_safely(neighbour->node, clear_neighbour);
 	/* timeout flag on 'bev' */
 	} else if (events & BEV_EVENT_TIMEOUT) {
 		timeout_process(&global_state->neighbours, neighbour);
@@ -333,13 +295,16 @@ static void event_cb(struct bufferevent *bev, short events, void *ctx)
 	global_state_t	*global_state = (global_state_t *) ctx;
 
 	/* find neighbour with 'bev' */
-	neighbour = find_neighbour(&global_state->neighbours, bev);
+	neighbour = find_neighbour(&global_state->neighbours,
+				   bev,
+				   compare_neighbour_bufferevents);
 	if (neighbour != NULL) {
 		process_neighbour(global_state, neighbour, events);
 	/* no such neighbour found; try finding it at pending_neighbours */
 	} else {
 		neighbour = find_neighbour(&global_state->pending_neighbours,
-					   bev);
+					   bev,
+					   compare_neighbour_bufferevents);
 		/* 'bev' must belong to either 'neighbours' or
 		 * 'pending_neighbours' */
 		assert(neighbour != NULL);
@@ -363,12 +328,13 @@ static void accept_connection(struct evconnlistener *listener,
 {
 	struct event_base	*base;
 	struct bufferevent	*bev;
+	neighbour_t		*neigh;
 	struct in6_addr		*new_addr;
-	host_t			*new_host;
+	host_t			*host;
 	char			text_ip[INET6_ADDRSTRLEN];
 	struct timeval		timeout;
 
-	global_state_t *global_state = (struct s_global_state *) ctx;
+	global_state_t *global_state  = (struct s_global_state *) ctx;
 	struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *) addr;
 
 	/* put binary representation of IP to 'new_addr' */
@@ -376,9 +342,10 @@ static void accept_connection(struct evconnlistener *listener,
 
 	ip_to_string(new_addr, text_ip);
 
-	if (find_neighbour_by_addr(&global_state->pending_neighbours,
-				   new_addr)) {
-		log_debug("accept_connection - peer %s already at "
+	if (find_neighbour(&global_state->pending_neighbours,
+			   new_addr,
+			   compare_neighbour_addrs)) {
+		log_debug("accept_connection - host %s already at "
 			  "pending neighbours", text_ip);
 		return;
 	}
@@ -402,9 +369,9 @@ static void accept_connection(struct evconnlistener *listener,
 	bufferevent_set_timeouts(bev, &timeout, NULL);
 
 	/* add the new connection to the list of our neighbours */
-	if (!add_new_neighbour(&global_state->neighbours,
-			       new_addr,
-			       bev)) {
+	if (!(neigh = add_new_neighbour(&global_state->neighbours,
+					new_addr,
+					bev))) {
 		log_debug("accept_connection - adding failed");
 		bufferevent_free(bev);
 		return;
@@ -412,9 +379,15 @@ static void accept_connection(struct evconnlistener *listener,
 
 	log_info("New connection from [%s]:%d", text_ip,
 		ntohs(addr_in6->sin6_port));
-	if ((new_host = save_host(&global_state->hosts, new_addr))) {
-		/* we are now connected to this host, hence unavailable */
+
+	host = save_host(&global_state->hosts, new_addr);
+	if (!host) {
+		host = find_host(&global_state->hosts, new_addr);
 		unset_host_flags(new_host, HOST_AVAILABLE);
+	}
+
+	if (host != NULL) {
+		neigh->host = host;
 	}
 }
 
@@ -440,7 +413,7 @@ static void accept_error_cb(struct evconnlistener *listener,
 	event_base_loopexit(base, NULL);
 
 	/* delete neighbours */
-	clear_neighbours(&global_state->neighbours);
+	linkedlist_destroy(&global_state->neighbours, clear_neighbour);
 }
 
 /**
@@ -505,6 +478,7 @@ int connect_to_addr(global_state_t		*global_state,
 {
 	struct bufferevent	*bev;
 	host_t			*host;
+	neighbour_t		*neigh;
 	struct sockaddr		*sock_addr;
 	struct sockaddr_in6	sock_addr6;
 	int			sock_len;
@@ -515,14 +489,18 @@ int connect_to_addr(global_state_t		*global_state,
 	ip_to_string(addr, text_ip);
 
 	/* don't connect to already connected host */
-	if (find_neighbour_by_addr(&global_state->neighbours, addr) != NULL) {
-		log_debug("connect_to_addr - host already connected");
+	if (find_neighbour(&global_state->neighbours,
+			   addr,
+			   compare_neighbour_addrs) != NULL) {
+		log_debug("connect_to_host - host already connected");
 		return 1;
 	}
 
 	/* don't attempt to connect to already pending connection */
-	if (linkedlist_find(&global_state->pending_neighbours, addr) != NULL) {
-		log_debug("connect_to_addr - host is in the pending conns");
+	if (find_neighbour(&global_state->pending_neighbours,
+			   addr,
+			   compare_neighbour_addrs) != NULL) {
+		log_debug("connect_to_host - host is in the pending conns");
 		return 2;
 	}
 
@@ -559,19 +537,22 @@ int connect_to_addr(global_state_t		*global_state,
 
 	/* add host to the list of pending neighbours and let event_cb
 	 * determine whether the host is our neighbour now */
-	if (!add_new_neighbour(&global_state->pending_neighbours, addr, bev)) {
-		log_debug("connect_to_addr - neighbour %s NOT ADDED into "
+	if (!(neigh = add_new_neighbour(&global_state->pending_neighbours,
+					addr,
+					bev))) {
+		log_debug("connect_to_host - host %s NOT ADDED into "
 			  "pending neighbours", text_ip);
 		bufferevent_free(bev);
 		return 3;
 	} else {
-		log_debug("connect_to_addr - neighbour %s ADDED into "
+		log_debug("connect_to_host - host %s ADDED into "
 			  "pending neighbours", text_ip);
 	}
 
-	host = find_host_by_addr(&global_state->hosts, addr);
+	host = find_host(&global_state->hosts, addr);
 	if (host != NULL) {
 		unset_host_flags(host, HOST_AVAILABLE);
+		neigh->host = host;
 	}
 
 	/* connect to the host; socket_connect also assigns fd */
@@ -609,40 +590,27 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 	/* only if we don't have any non-default hosts available */
 	if (available_hosts_size == 0) {
 		log_debug("add_more_connections - "
-			  "choosing random default host");
+			  "connecting to a default host...");
 		/* choose random default host */
 		idx = rand() % DEFAULT_HOSTS_SIZE;
 		memcpy(&addr, DEFAULT_HOSTS[idx], 16);
 
-		result = connect_to_addr(global_state, &addr);
-		/* the connecting attempt was successful */
-		if (result == 0) {
-			/* if the host becomes our neighbour,
-			 * and we need more connections,
-			 * get a list of hosts from them and
-			 * attempt to connect to them;
-			 * it's our goal to use as few
-			 * default hosts as possible
-			 */
-			log_debug("add_more_connections - "
-				  "connect attempt succeeded");
-		/* the host is our neighbour; ask them for more addrs */
-		} else if (result == 1) {
-			neigh = find_neighbour_by_addr(&global_state->
-						       neighbours,
-						       &addr);
+		/* if the host becomes our neighbour, and we need more
+		 * connections, get a list of hosts from them and attempt to
+		 * connect to them; it's our goal to use as few default
+		 * hosts as possible
+		 */
+		result = connect_to_host(global_state, &addr, DEFAULT_PORT);
+
+		/* the host is already our neighbour; ask them for more addrs */
+		if (result == 1) {
+			neigh = find_neighbour(&global_state->neighbours,
+					       &addr,
+					       compare_neighbour_addrs);
 			assert(neigh != NULL);
 			ask_for_addresses(neigh);
 			log_debug("add_more_connections - "
 				  "asking for hosts");
-		/* the host is a pending connection */
-		} else if (result == 2) {
-			/* wait for them to reject/accept us */
-			log_debug("add_more_connections - "
-				  "pending, do nothing");
-		} else {
-			log_debug("add_more_connections - "
-				  "connect attempt didn't succeed");
 		}
 	/* we've got some available hosts */
 	} else {

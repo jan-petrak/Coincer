@@ -39,11 +39,87 @@ linkedlist_node_t *linkedlist_append(linkedlist_t *root, void *data)
 }
 
 /**
- * Delete node from the linked list.
+ * Apply a function to all nodes of a linked list.
  *
- * @param	node	Node to be deleted from the linked list.
+ * @param	root		Root of the linked list.
+ * @param	data_func	Apply this function to nodes' data. This
+ *				function is called before node_func and
+ *				can be NULL.
+ * @param	node_func	Apply this function on the nodes. It can be
+ *				NULL as well.
+ */
+void linkedlist_apply(linkedlist_t *root,
+		      void	   (*data_func) (void *data),
+		      void	   (*node_func) (linkedlist_node_t *node))
+{
+	linkedlist_apply_if(root, NULL, NULL, data_func, node_func);
+}
+
+/**
+ * Apply a function to those linked list nodes and their data, that satisfy
+ * a predicate. This function degrades into linkedlist_apply() if the
+ * predicate is NULL.
+ *
+ * @param	root		Root of the linked list.
+ * @param	attribute	Predicate's attribute.
+ * @param	pred		Choose nodes based on result of this function.
+ *				The predicate succeeds with non-zero result.
+ * @param	data_func	Apply this function to selected nodes' data.
+ *				This function is called before node_func and
+ *				can be NULL.
+ * @param	node_func	Apply this function on selected nodes. This
+ *				can also be set to NULL.
+ */
+void linkedlist_apply_if(linkedlist_t	*root,
+			 void		*attribute,
+			 int		(*pred) (void *node_data,
+						void *attribute),
+			 void		(*data_func) (void *data),
+			 void		(*node_func) (linkedlist_node_t *node))
+{
+	linkedlist_node_t	*current_node;
+	linkedlist_node_t	*next_node;
+	void			*node_data;
+
+	current_node = linkedlist_get_first(root);
+	while (current_node != NULL) {
+		node_data = current_node->data;
+
+		if (pred == NULL || pred(node_data, attribute)) {
+			if (data_func != NULL) {
+				data_func(current_node->data);
+			}
+			next_node = linkedlist_get_next(root, current_node);
+			if (node_func != NULL) {
+				node_func(current_node);
+			}
+		}
+
+		current_node = next_node;
+	}
+}
+
+/**
+ * Delete a node from a linked list including its data.
+ *
+ * @param	node		The node to be deleted from the linked list.
  */
 void linkedlist_delete(linkedlist_node_t *node)
+{
+	linkedlist_delete_safely(node, NULL);
+}
+
+/**
+ * Delete a node from a linked list including its data and its content.
+ *
+ * @param	node		The node to be deleted from the linked list.
+ * @param	clear_data	A clean up function to be applied to node's
+ *				data. If there are no dynamically allocated
+ *				data inside of the node, fill with NULL or
+ *				use linkedlist_delete() instead.
+ */
+void linkedlist_delete_safely(linkedlist_node_t *node,
+			      void		(*clear_data) (void *data))
 {
 	/* fix the links of neighbour nodes */
 	node->prev->next = node->next;
@@ -51,6 +127,9 @@ void linkedlist_delete(linkedlist_node_t *node)
 
 	/* node's data deletion part */
 	if (node->data != NULL) {
+		if (clear_data != NULL) {
+			clear_data(node->data);
+		}
 		free(node->data);
 	}
 
@@ -59,11 +138,15 @@ void linkedlist_delete(linkedlist_node_t *node)
 }
 
 /**
- * Destroys a linked list.
+ * Destroys a linked list including data and their content.
  *
- * @param	root	Root of the linked list to destroy.
+ * @param	root		Root of the linked list to destroy.
+ * @param	clear_data	A clean up function to be applied to node's
+ *				data. If there are no dynamically allocated
+ *				data inside of the node, fill with NULL.
  */
-void linkedlist_destroy(linkedlist_t *root)
+void linkedlist_destroy(linkedlist_t	*root,
+			void		(*clear_data) (void *data))
 {
 	linkedlist_node_t *tmp;
 
@@ -71,6 +154,9 @@ void linkedlist_destroy(linkedlist_t *root)
 	while (tmp->next != NULL) {
 		tmp = tmp->next;
 		if (tmp->prev->data != NULL) {
+			if (clear_data != NULL) {
+				clear_data(tmp->prev->data);
+			}
 			free(tmp->prev->data);
 		}
 		free(tmp->prev);
@@ -78,7 +164,18 @@ void linkedlist_destroy(linkedlist_t *root)
 }
 
 /**
- * Find node in the linked list by data.
+ * Determine whether a linkedlist has no elements.
+ *
+ * @return	1	The linkedlist is empty.
+ * @return	0	The linkedlist is not empty.
+ */
+int linkedlist_empty(const linkedlist_t *root)
+{
+	return linkedlist_get_first(root) == NULL;
+}
+
+/**
+ * Find a node in a linked list by data.
  *
  * @param	root			Root of the linked list.
  * @param	data			Data of the requested node.
@@ -86,7 +183,8 @@ void linkedlist_destroy(linkedlist_t *root)
  * @return	linkedlist_node_t	Node containing 'data'.
  * @return	NULL			If the node doesn't exist.
  */
-linkedlist_node_t *linkedlist_find(const linkedlist_t *root, const void *data)
+linkedlist_node_t *linkedlist_find(const linkedlist_t	*root,
+				   const void		*data)
 {
 	/* start the search from the first node of the linked list */
 	linkedlist_node_t *current = linkedlist_get_first(root);
@@ -249,6 +347,60 @@ linkedlist_node_t *linkedlist_insert_before(linkedlist_t	*root,
 		node = root->first.next;
 	}
 	return linkedlist_insert_after(root, node->prev, data);
+}
+
+/**
+ * Move a node from one linkedlist into another.
+ *
+ * @param	node		Move this node.
+ * @param	dest		Into this linked list.
+ */
+void linkedlist_move(linkedlist_node_t *node, linkedlist_t *dest)
+{
+	linkedlist_node_t *dest_last;
+
+	/* remove the node from its LL */
+	linkedlist_remove(node);
+
+	/* insert the node right before the last (stub) node of the dest LL */
+	dest_last = dest->last.prev;
+
+	node->prev = dest_last;
+	node->next = dest_last->next;
+	dest_last->next->prev = node;
+	dest_last->next = node;
+}
+
+/**
+ * Remove a node from a linked list. Keep the node's data intact.
+ *
+ * @param	node	The node to be removed from the linked list.
+ */
+void linkedlist_remove(linkedlist_node_t *node)
+{
+	/* fix the links of neighbour nodes */
+	node->prev->next = node->next;
+	node->next->prev = node->prev;
+
+	free(node);
+}
+
+/**
+ * Remove all nodes from a linked list. Keep node's data intact.
+ *
+ * @param	root	The root of the linked list.
+ */
+void linkedlist_remove_all(linkedlist_t *root)
+{
+	linkedlist_node_t *tmp;
+
+	tmp = root->first.next;
+	while (tmp->next != NULL) {
+		tmp = tmp->next;
+		free(tmp->prev);
+	}
+
+	linkedlist_init(root);
 }
 
 /**

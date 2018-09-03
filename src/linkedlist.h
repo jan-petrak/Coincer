@@ -40,9 +40,26 @@ typedef struct s_linkedlist {
 
 linkedlist_node_t *linkedlist_append(linkedlist_t *root, void *data);
 
+void linkedlist_apply(linkedlist_t *root,
+		      void	  (*data_func) (void *data),
+		      void	  (*node_func) (linkedlist_node_t *node));
+
+void linkedlist_apply_if(linkedlist_t	*root,
+			 void		*attribute,
+			 int	       (*pred) (void *node_data,
+						void *attribute),
+			 void	       (*data_func) (void *data),
+			 void	       (*node_func) (linkedlist_node_t *node));
+
 void linkedlist_delete(linkedlist_node_t *node);
 
-void linkedlist_destroy(linkedlist_t *root);
+void linkedlist_delete_safely(linkedlist_node_t *node,
+			      void	       (*clear_data) (void *data));
+
+void linkedlist_destroy(linkedlist_t	*root,
+			void	       (*clear_data) (void *data));
+
+int linkedlist_empty(const linkedlist_t *root);
 
 linkedlist_node_t *linkedlist_find(const linkedlist_t *root, const void *data);
 
@@ -65,6 +82,12 @@ linkedlist_node_t *linkedlist_insert_after(linkedlist_t		*root,
 linkedlist_node_t *linkedlist_insert_before(linkedlist_t	*root,
 					    linkedlist_node_t	*node,
 					    void		*data);
+
+void linkedlist_move(linkedlist_node_t *node, linkedlist_t *dest);
+
+void linkedlist_remove(linkedlist_node_t *node);
+
+void linkedlist_remove_all(linkedlist_t *root);
 
 size_t linkedlist_size(const linkedlist_t *root);
 
