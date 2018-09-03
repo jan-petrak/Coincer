@@ -22,13 +22,19 @@
 #include "daemon_messages.h"
 
 static const char *msg_type_str[] = {
+	"p2p.bye",
+	"p2p.hello",
+	"p2p.peers.adv",
+	"p2p.peers.sol"
 	"p2p.ping",
-	"p2p.pong"
-	/* TODO: and other string representations of daemon type messages */
+	"p2p.pong",
+	"p2p.route.adv",
+	"p2p.route.sol"
 };
 
 int decode_message(const char *json_message, message_t *message);
+int decode_message_body(const char *json_body, message_body_t *body);
 int encode_message(const message_t *message, char **json_message);
-int fetch_json_message_body(const char *json_message, char **json_message_body);
+int encode_message_body(const message_body_t *body, char **json_body);
 
 #endif /* JSON_PARSER_H */

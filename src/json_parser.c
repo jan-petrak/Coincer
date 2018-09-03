@@ -88,6 +88,21 @@ int decode_message(const char *json_message, message_t *message)
 
 /* TODO: Implement */
 /**
+ * Decode a JSON format message body into a daemon message body.
+ *
+ * @param	json_body	Decode this JSON message body.
+ * @param	message		Store decoded body in here.
+ *
+ * @return	0		Decoding successful.
+ * @return	1		Failure.
+ */
+int decode_message_body(const char *json_body, message_body_t *body)
+{
+	return 0;
+}
+
+/* TODO: Implement */
+/**
  * Encode a daemon message into JSON format output.
  *
  * @param	message		Message to be encoded.
@@ -136,16 +151,16 @@ int encode_message(const message_t *message, char **json_message)
 
 /* TODO: Implement */
 /**
- * Fetch a JSON message body from a JSON message.
+ * Encode a daemon message body into JSON format message body.
  *
- * @param	json_message		JSON message.
- * @param	json_message_body	Dynamically allocated message body
- *					retrieved from json_message.
+ * @param	body		Message body to be encoded.
+ * @param	json_body	Dynamically allocated string
+ *				of JSON message body.
  *
- * @return	0			Successfully fetched.
- * @return	1			Failure.
+ * @return	0		Encoding successful.
+ * @return	1		Failure.
  */
-int fetch_json_message_body(const char *json_message, char **json_message_body)
+int encode_message_body(const message_body_t *body, char **json_body)
 {
 	return 0;
 }
