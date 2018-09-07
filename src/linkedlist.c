@@ -82,15 +82,15 @@ void linkedlist_apply_if(linkedlist_t	*root,
 	void			*node_data;
 
 	current_node = linkedlist_get_first(root);
-	while (current_node != NULL) {
+	while (current_node) {
 		node_data = current_node->data;
+		next_node = linkedlist_get_next(root, current_node);
 
-		if (pred == NULL || pred(node_data, attribute)) {
-			if (data_func != NULL) {
+		if (!pred || pred(node_data, attribute)) {
+			if (data_func) {
 				data_func(current_node->data);
 			}
-			next_node = linkedlist_get_next(root, current_node);
-			if (node_func != NULL) {
+			if (node_func) {
 				node_func(current_node);
 			}
 		}
@@ -126,8 +126,8 @@ void linkedlist_delete_safely(linkedlist_node_t *node,
 	node->next->prev = node->prev;
 
 	/* node's data deletion part */
-	if (node->data != NULL) {
-		if (clear_data != NULL) {
+	if (node->data) {
+		if (clear_data) {
 			clear_data(node->data);
 		}
 		free(node->data);
@@ -151,10 +151,10 @@ void linkedlist_destroy(linkedlist_t	*root,
 	linkedlist_node_t *tmp;
 
 	tmp = root->first.next;
-	while (tmp->next != NULL) {
+	while (tmp->next) {
 		tmp = tmp->next;
-		if (tmp->prev->data != NULL) {
-			if (clear_data != NULL) {
+		if (tmp->prev->data) {
+			if (clear_data) {
 				clear_data(tmp->prev->data);
 			}
 			free(tmp->prev->data);
@@ -188,7 +188,7 @@ linkedlist_node_t *linkedlist_find(const linkedlist_t	*root,
 {
 	/* start the search from the first node of the linked list */
 	linkedlist_node_t *current = linkedlist_get_first(root);
-	while (current != NULL) {
+	while (current) {
 		/* node found */
 		if (current->data == data) {
 			/* return the node containing 'data' */
@@ -248,7 +248,7 @@ linkedlist_node_t *linkedlist_get_last(const linkedlist_t *root)
 linkedlist_node_t *linkedlist_get_next(const linkedlist_t	*root,
 				       const linkedlist_node_t	*node)
 {
-	if (node == NULL || node->next == &root->last) {
+	if (!node || node->next == &root->last) {
 		return NULL;
 	}
 
@@ -268,7 +268,7 @@ linkedlist_node_t *linkedlist_get_next(const linkedlist_t	*root,
 linkedlist_node_t *linkedlist_get_prev(const linkedlist_t	*root,
 				       const linkedlist_node_t	*node)
 {
-	if (node == NULL || node->prev == &root->first) {
+	if (!node || node->prev == &root->first) {
 		return NULL;
 	}
 
@@ -313,7 +313,7 @@ linkedlist_node_t *linkedlist_insert_after(linkedlist_t		*root,
 	}
 
 	new_node = (linkedlist_node_t *) malloc(sizeof(linkedlist_node_t));
-	if (new_node == NULL) {
+	if (!new_node) {
 		log_error("Inserting a new node");
 		return NULL;
 	}
@@ -359,8 +359,9 @@ void linkedlist_move(linkedlist_node_t *node, linkedlist_t *dest)
 {
 	linkedlist_node_t *dest_last;
 
-	/* remove the node from its LL */
-	linkedlist_remove(node);
+	/* unlink the node from its LL */
+	node->prev->next = node->next;
+	node->next->prev = node->prev;
 
 	/* insert the node right before the last (stub) node of the dest LL */
 	dest_last = dest->last.prev;
@@ -395,7 +396,7 @@ void linkedlist_remove_all(linkedlist_t *root)
 	linkedlist_node_t *tmp;
 
 	tmp = root->first.next;
-	while (tmp->next != NULL) {
+	while (tmp->next) {
 		tmp = tmp->next;
 		free(tmp->prev);
 	}
@@ -416,7 +417,7 @@ size_t linkedlist_size(const linkedlist_t *root)
 	size_t			n = 0;
 
 	tmp = root->first.next;
-	while (tmp->next != NULL) {
+	while (tmp->next) {
 		n++;
 		tmp = tmp->next;
 	}

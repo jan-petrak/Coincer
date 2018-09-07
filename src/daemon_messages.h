@@ -86,20 +86,13 @@ typedef struct s_message {
 } message_t;
 
 int create_p2p_bye(message_t *message);
-
 int create_p2p_hello(message_t *message, unsigned short port);
-
 int create_p2p_peers_adv(message_t *message, const linkedlist_t *hosts);
-
 int create_p2p_peers_sol(message_t *message);
-
 int create_p2p_ping(message_t *message);
-
 int create_p2p_pong(message_t *message);
-
 int create_p2p_route_adv(message_t *message);
-
-int create_p2p_route_sol(message_t *msg_body, const unsigned char *target);
+int create_p2p_route_sol(message_t *message, const unsigned char *target);
 
 void message_delete(message_t *message);
 

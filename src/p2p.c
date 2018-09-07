@@ -29,6 +29,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "crypto.h"
+#include "global_state.h"
 #include "hosts.h"
 #include "linkedlist.h"
 #include "log.h"
@@ -56,7 +58,7 @@ static void ask_for_addresses(neighbour_t *neighbour)
 {
 	struct bufferevent *bev;
 
-	if (neighbour == NULL || (bev = neighbour->buffer_event) == NULL) {
+	if (!neighbour || !(bev = neighbour->buffer_event)) {
 		return;
 	}
 
@@ -82,7 +84,7 @@ static void process_hosts(global_state_t *global_state, char *hosts)
 
 	line = strtok_r(hosts, delim, &save_ptr);
 
-	while (line != NULL) {
+	while (line) {
 		if (inet_pton(AF_INET6, line, &addr) == 1) {
 			save_host(&global_state->hosts, &addr);
 		}
@@ -98,6 +100,7 @@ static void process_hosts(global_state_t *global_state, char *hosts)
  */
 static void p2p_process(struct bufferevent *bev, void *ctx)
 {
+	char		*addrs = NULL;
 	global_state_t	*global_state;
 	struct evbuffer	*input;
 	size_t		len;
@@ -127,7 +130,7 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 
 	/* allocate memory for the input message including '\0' */
 	message = (char *) malloc((len + 1) * sizeof(char));
-	if (message == NULL) {
+	if (!message) {
 		log_error("Received message allocation");
 		return;
 	}
@@ -152,7 +155,7 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 	} else if (strcmp(message, "pong") == 0) {
 	/* "hosts" is a request for list of addresses */
 	} else if (strcmp(message, "hosts") == 0) {
-		hosts_to_str(&global_state->hosts, response);
+		hosts_to_str(&global_state->hosts, &addrs);
 	/* list of addresses */
 	} else {
 		if (neighbour->flags & NEIGHBOUR_ADDRS_REQ) {
@@ -165,6 +168,13 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 		log_debug("p2p_process - responding with: %s", response);
 		/* copy response to the output buffer */
 		evbuffer_add_printf(output, "%s", response);
+	/* note: this will be replaced in the next commit */
+	} else if (addrs) {
+		log_debug("p2p_process - responding with: %s", addrs);
+		/* copy response to the output buffer */
+		evbuffer_add_printf(output, "%s", addrs);
+
+		free(addrs);
 	}
 
 	/* deallocate input message */
@@ -242,7 +252,7 @@ static void process_pending_neighbour(global_state_t	*global_state,
 		if (needed_conns > 0) {
 			/* and we don't have enough hosts available */
 			if (available_hosts_size < needed_conns) {
-				ask_for_addresses(new_neighbour);
+				ask_for_addresses(neighbour);
 			}
 		}
 	/* connecting to the neighbour was unsuccessful */
@@ -298,7 +308,7 @@ static void event_cb(struct bufferevent *bev, short events, void *ctx)
 	neighbour = find_neighbour(&global_state->neighbours,
 				   bev,
 				   compare_neighbour_bufferevents);
-	if (neighbour != NULL) {
+	if (neighbour) {
 		process_neighbour(global_state, neighbour, events);
 	/* no such neighbour found; try finding it at pending_neighbours */
 	} else {
@@ -383,10 +393,10 @@ static void accept_connection(struct evconnlistener *listener,
 	host = save_host(&global_state->hosts, new_addr);
 	if (!host) {
 		host = find_host(&global_state->hosts, new_addr);
-		unset_host_flags(new_host, HOST_AVAILABLE);
 	}
 
-	if (host != NULL) {
+	if (host) {
+		unset_host_flags(host, HOST_AVAILABLE);
 		neigh->host = host;
 	}
 }
@@ -491,7 +501,7 @@ int connect_to_addr(global_state_t		*global_state,
 	/* don't connect to already connected host */
 	if (find_neighbour(&global_state->neighbours,
 			   addr,
-			   compare_neighbour_addrs) != NULL) {
+			   compare_neighbour_addrs)) {
 		log_debug("connect_to_host - host already connected");
 		return 1;
 	}
@@ -499,7 +509,7 @@ int connect_to_addr(global_state_t		*global_state,
 	/* don't attempt to connect to already pending connection */
 	if (find_neighbour(&global_state->pending_neighbours,
 			   addr,
-			   compare_neighbour_addrs) != NULL) {
+			   compare_neighbour_addrs)) {
 		log_debug("connect_to_host - host is in the pending conns");
 		return 2;
 	}
@@ -550,7 +560,7 @@ int connect_to_addr(global_state_t		*global_state,
 	}
 
 	host = find_host(&global_state->hosts, addr);
-	if (host != NULL) {
+	if (host) {
 		unset_host_flags(host, HOST_AVAILABLE);
 		neigh->host = host;
 	}
@@ -592,7 +602,7 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 		log_debug("add_more_connections - "
 			  "connecting to a default host...");
 		/* choose random default host */
-		idx = rand() % DEFAULT_HOSTS_SIZE;
+		idx = get_random_uint32_t(DEFAULT_HOSTS_SIZE);
 		memcpy(&addr, DEFAULT_HOSTS[idx], 16);
 
 		/* if the host becomes our neighbour, and we need more
@@ -600,7 +610,7 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 		 * connect to them; it's our goal to use as few default
 		 * hosts as possible
 		 */
-		result = connect_to_host(global_state, &addr, DEFAULT_PORT);
+		result = connect_to_addr(global_state, &addr);
 
 		/* the host is already our neighbour; ask them for more addrs */
 		if (result == 1) {

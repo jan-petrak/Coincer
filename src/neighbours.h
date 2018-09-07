@@ -26,9 +26,6 @@
 #include "hosts.h"
 #include "linkedlist.h"
 
-/** Minimum number of peers we need to be connected to. */
-#define MIN_NEIGHBOURS	3
-
 /** Request for addresses. */
 #define NEIGHBOUR_ADDRS_REQ	0x01
 

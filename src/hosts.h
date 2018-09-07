@@ -24,18 +24,16 @@
 
 #include "linkedlist.h"
 
-/* number of hosts guaranteed to be in the network */
+/** The number of hosts guaranteed to be in the network. */
 #define	DEFAULT_HOSTS_SIZE	2
-/* maximum number of hosts we store */
+/** Maximum number of hosts we store. */
 #define	MAX_HOSTS_SIZE		50
 
 /** A host is not available if they is already our neighbour,
- *  pending to become one, or if we are unnable to connect to them.
- *  1 if available, 0 if not.
- */
+ *  pending to become one, or if we are unnable to connect to them. */
 #define HOST_AVAILABLE	0x01
 
-/* IPv6 addresses of hosts guaranteed to be in the network */
+/** IPv6 addresses of hosts guaranteed to be in the network. */
 static const unsigned char DEFAULT_HOSTS[DEFAULT_HOSTS_SIZE][16] = {
 /* TODO: Replace with real default hosts */
 	{
@@ -72,7 +70,7 @@ int fetch_specific_hosts(const linkedlist_t	*hosts,
 host_t *find_host(const linkedlist_t	*hosts,
 		  const struct in6_addr	*addr);
 
-void hosts_to_str(const linkedlist_t *hosts, char *output);
+int hosts_to_str(const linkedlist_t *hosts, char **output);
 
 void reset_hosts_availability(linkedlist_t *hosts);
 

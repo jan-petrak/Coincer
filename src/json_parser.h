@@ -21,6 +21,8 @@
 
 #include "daemon_messages.h"
 
+/* the order of these strings must be the same as the order of enums within
+ * enum message_type at daemon_messages.h */
 static const char *msg_type_str[] = {
 	"p2p.bye",
 	"p2p.hello",

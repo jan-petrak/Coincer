@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "crypto.h"
 #include "hosts.h"
 #include "linkedlist.h"
 #include "log.h"
@@ -34,7 +35,7 @@
 void clear_hosts(linkedlist_t *hosts)
 {
 	/* host_t has no dynamically allocated variables */
-	linkedlist_destroy(hosts);
+	linkedlist_destroy(hosts, NULL);
 }
 
 /**
@@ -52,7 +53,7 @@ int fetch_hosts(const char *hosts_path, linkedlist_t *hosts)
 	FILE		*hosts_file;
 
 	hosts_file = fopen(hosts_path, "rb");
-	if (hosts_file == NULL) {
+	if (!hosts_file) {
 		log_warn("Hosts file not found at %s. "
 			 "It is safe to ignore this warning", hosts_path);
 		return 1;
@@ -88,21 +89,21 @@ int fetch_specific_hosts(const linkedlist_t	*hosts,
 	host_t			*current_host;
 	size_t			n = 0;
 
-	if (output != NULL) {
+	if (output) {
 		*output = (host_t **) malloc(linkedlist_size(hosts) *
 					     sizeof(host_t *));
-		if (*output == NULL) {
+		if (!*output) {
 			log_error("Fetching specific hosts");
 			return -1;
 		}
 	}
 
 	current_node = linkedlist_get_first(hosts);
-	while (current_node != NULL) {
+	while (current_node) {
 		current_host = (host_t *) current_node->data;
 		/* if all specified flags are being set on this host */
 		if ((current_host->flags & flags) == flags) {
-			if (output != NULL) {
+			if (output) {
 				(*output)[n++] = current_host;
 			} else {
 				n++;
@@ -128,7 +129,7 @@ host_t *find_host(const linkedlist_t	*hosts,
 {
 	const linkedlist_node_t *current = linkedlist_get_first(hosts);
 
-	while (current != NULL) {
+	while (current) {
 		host_t *current_data = (host_t *) current->data;
 
 		/* ip addresses match => requested host found */
@@ -142,21 +143,31 @@ host_t *find_host(const linkedlist_t	*hosts,
 	return NULL;
 }
 
-/* TODO: allocate memory for the 'output', don't assume any buffer size */
 /**
  * '\n' separated output string of host addresses in readable form.
  *
  * @param	hosts	List of hosts.
  * @param	output	Output string.
+ *
+ * @return	0	Success.
+ * @return	1	Failure.
  */
-void hosts_to_str(const linkedlist_t *hosts, char *output)
+int hosts_to_str(const linkedlist_t *hosts, char **output)
 {
 	linkedlist_node_t	*current_node;
 	host_t			*current_host;
 	size_t			output_size = 0;
 	char			text_ip[INET6_ADDRSTRLEN];
 
-	output[0] = '\0';
+	/* TODO: Don't assume any buffer size. This will be fixed in the
+	 * 	 next commit. */
+	*output = (char *) malloc(4096 * sizeof(char));
+	if (!*output) {
+		log_error("Hosts to string");
+		return 1;
+	}
+
+	*output[0] = '\0';
 	current_node = linkedlist_get_first(hosts);
 	while (current_node != NULL) {
 		current_host = (host_t *) current_node->data;
@@ -167,15 +178,17 @@ void hosts_to_str(const linkedlist_t *hosts, char *output)
 			  text_ip,
 			  INET6_ADDRSTRLEN);
 		output_size += strlen(text_ip);
-		strcat(output, text_ip);
+		strcat(*output, text_ip);
 
 		current_node = linkedlist_get_next(hosts, current_node);
 		/* if it's not the last host, append '\n' */
 		if (current_node != NULL) {
-			output[output_size++] = '\n';
+			*output[output_size++] = '\n';
 		}
-		output[output_size] = '\0';
+		*output[output_size] = '\0';
 	}
+
+	return 0;
 }
 
 /**
@@ -210,7 +223,7 @@ host_t *save_host(linkedlist_t *hosts, const struct in6_addr *addr)
 
 	/* allocate memory for a new host */
 	new_host = (host_t *) malloc(sizeof(host_t));
-	if (new_host == NULL) {
+	if (!new_host) {
 		log_error("Saving new host");
 		return NULL;
 	}
@@ -227,7 +240,7 @@ host_t *save_host(linkedlist_t *hosts, const struct in6_addr *addr)
 	 * function) is likely to save in ascending order => better performance
 	 */
 	current_node = linkedlist_get_last(hosts);
-	while (current_node != NULL) {
+	while (current_node) {
 		current_host = (host_t *) current_node->data;
 
 		cmp_value = memcmp(&new_host->addr, &current_host->addr, 16);
@@ -240,7 +253,7 @@ host_t *save_host(linkedlist_t *hosts, const struct in6_addr *addr)
 			new_node = linkedlist_insert_after(hosts,
 							   current_node,
 							   new_host);
-			if (new_node != NULL) {
+			if (new_node) {
 				log_debug("save_host - %s successfully saved",
 					  text_ip);
 			}
@@ -250,7 +263,7 @@ host_t *save_host(linkedlist_t *hosts, const struct in6_addr *addr)
 	}
 	/* the new host's addr is lexicographically the lowest */
 	new_node = linkedlist_insert_after(hosts, &hosts->first, new_host);
-	if (new_node != NULL) {
+	if (new_node) {
 		log_debug("save_host - %s successfully saved", text_ip);
 	}
 
@@ -284,7 +297,7 @@ void shuffle_hosts_arr(host_t **hosts, size_t hosts_size)
 		 * swapping hosts[i] with hosts[j], where j is a random index
 		 * such that j >= i AND j < hosts_size
 		 */
-		j = i + rand() % (hosts_size - i);
+		j = i + get_random_uint32_t(hosts_size - i);
 
 		tmp = hosts[i];
 		hosts[i] = hosts[j];
@@ -308,13 +321,13 @@ int store_hosts(const char *hosts_path, const linkedlist_t *hosts)
 	FILE			*hosts_file;
 
 	hosts_file = fopen(hosts_path, "wb");
-	if (hosts_file == NULL) {
+	if (!hosts_file) {
 		log_error("Can not create hosts file at %s", hosts_path);
 		return 1;
 	}
 
 	current = linkedlist_get_first(hosts);
-	while (current != NULL) {
+	while (current) {
 		current_host = (host_t *) current->data;
 		/* if fwrite fails, terminate storing */
 		if (fwrite(&current_host->addr,

@@ -54,9 +54,6 @@ int main(void)
 		return 4;
 	}
 
-	/* TODO: use randombytes (from libsodium?) for the seed of randomness */
-	srand((unsigned) time(NULL));
-
 	if (global_state_init(&global_state)) {
 		log_error("Basic daemon setup");
 		return 1;
@@ -65,7 +62,7 @@ int main(void)
 	fetch_hosts(global_state.filepaths.hosts, &global_state.hosts);
 
 	/* setup everything needed for TCP listening */
-	if (listen_init(&listener, &global_state) != 0) {
+	if (listen_init(&listener, &global_state)) {
 		log_error("Initialization of TCP listening");
 		return 2;
 	}

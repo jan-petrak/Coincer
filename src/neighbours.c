@@ -47,7 +47,7 @@ neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
 	/* create new neighbour */
 	new_neighbour = (neighbour_t *) malloc(sizeof(neighbour_t));
 	/* allocation failure */
-	if (new_neighbour == NULL) {
+	if (!new_neighbour) {
 		log_error("add_new_neighbour - new_neighbour malloc");
                 return NULL;
 	}
@@ -117,8 +117,6 @@ int compare_neighbour_bufferevents(const neighbour_t		*neighbour,
 	return neighbour->buffer_event != bev;
 }
 
-}
-
 /**
  * Fetch pointers to neighbours with specific flags set, into an array
  * that is being allocated in here.
@@ -141,21 +139,21 @@ int fetch_specific_neighbours(const linkedlist_t	*neighbours,
 	neighbour_t		*current_neighbour;
 	size_t			n = 0;
 
-	if (output != NULL) {
+	if (output) {
 		*output = (neighbour_t **) malloc(linkedlist_size(neighbours) *
 						  sizeof(neighbour_t *));
-		if (*output == NULL) {
+		if (!*output) {
 			log_error("Fetching specific neighbours");
 			return -1;
 		}
 	}
 
 	current_node = linkedlist_get_first(neighbours);
-	while (current_node != NULL) {
+	while (current_node) {
 		current_neighbour = (neighbour_t *) current_node->data;
 		/* if all specified flags are being set on this neighbour */
 		if ((current_neighbour->flags & flags) == flags) {
-			if (output != NULL) {
+			if (output) {
 				(*output)[n++] = current_neighbour;
 			} else {
 				n++;
@@ -187,7 +185,7 @@ neighbour_t *find_neighbour(const linkedlist_t	*neighbours,
 	neighbour_t		*current_neighbour;
 
 	current_node = linkedlist_get_first(neighbours);
-	while (current_node != NULL) {
+	while (current_node) {
 		current_neighbour = (neighbour_t *) current_node->data;
 
 		/* cmp_func returns 0 when current_neighbour's attribute

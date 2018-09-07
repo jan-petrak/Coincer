@@ -26,6 +26,8 @@
 
 /** Default port for TCP listening. */
 #define	DEFAULT_PORT	31070
+/** Minimum number of peers we need to be connected to. */
+#define MIN_NEIGHBOURS	3
 /** After TIMEOUT_TIME seconds invoke timeout callback. */
 #define	TIMEOUT_TIME 	30
 

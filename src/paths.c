@@ -40,7 +40,7 @@ static int set_hosts_path(char *data_dir, char **hosts)
 	/* size of data_dir + HOSTS_FILE_NAME */
 	*hosts = (char *) malloc(strlen(data_dir) +
 				 sizeof(HOSTS_FILE_NAME));
-	if (*hosts == NULL) {
+	if (!*hosts) {
 		log_error("Setting hosts path");
 		return 1;
 	}

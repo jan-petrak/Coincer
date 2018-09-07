@@ -55,15 +55,16 @@ int create_p2p_hello(message_t *message, unsigned short port)
 	p2p_hello_t	*hello;
 
 	hello = (p2p_hello_t *) malloc(sizeof(p2p_hello_t));
-	if (hello == NULL) {
+	if (!hello) {
 		log_error("Creating p2p.hello");
 		return 1;
 	}
 
 	client = (char *) malloc(sizeof("/" PACKAGE_NAME ":"
 					PACKAGE_VERSION "/"));
-	if (client == NULL) {
+	if (!client) {
 		log_error("Creating p2p.hello");
+		free(hello);
 		return 1;
 	}
 
@@ -92,12 +93,15 @@ int create_p2p_peers_adv(message_t *message, const linkedlist_t *hosts)
 	p2p_peers_adv_t *peers_adv;
 
 	peers_adv = (p2p_peers_adv_t *) malloc(sizeof(p2p_peers_adv_t));
-	if (peers_adv == NULL) {
+	if (!peers_adv) {
 		log_error("Creating p2p.peers.adv");
 		return 1;
 	}
 
-	hosts_to_str(hosts, &peers_adv->addresses);
+	if (hosts_to_str(hosts, &peers_adv->addresses)) {
+		log_error("Creating p2p.peers.adv");
+		return 1;
+	}
 
 	message->body.type = P2P_PEERS_ADV;
 	message->body.data = peers_adv;
@@ -179,7 +183,7 @@ int create_p2p_route_sol(message_t *message, const unsigned char *target)
 	p2p_route_sol_t *route_sol;
 
 	route_sol = (p2p_route_sol_t *) malloc(sizeof(p2p_route_sol_t));
-	if (route_sol == NULL) {
+	if (!route_sol) {
 		log_error("Creating p2p.route.sol");
 		return 1;
 	}

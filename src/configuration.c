@@ -37,7 +37,7 @@
 static int set_homedir(char **homedir)
 {
 	*homedir = getenv("HOME");
-	if (*homedir == NULL || *homedir[0] == '\0') {
+	if (!*homedir || *homedir[0] == '\0') {
 		log_error("Can not find home directory");
 		return 1;
 	}
@@ -61,7 +61,7 @@ static int set_directories(char **config_dir, char **data_dir)
 
 	/* configuration directory */
 	tmpchar = getenv("XDG_CONFIG_HOME");
-	if (tmpchar == NULL || tmpchar[0] == '\0') {
+	if (!tmpchar || tmpchar[0] == '\0') {
 		if (set_homedir(&homedir)) {
 			return 1;
 		}
@@ -69,7 +69,7 @@ static int set_directories(char **config_dir, char **data_dir)
 		*config_dir = (char *) malloc(tmpsize +
 					     sizeof("/.config/" PACKAGE_NAME
 						    "/"));
-		if (*config_dir == NULL) {
+		if (!*config_dir) {
 			log_error("Setting configdir");
 			return 1;
 		}
@@ -79,7 +79,7 @@ static int set_directories(char **config_dir, char **data_dir)
 		tmpsize = strlen(tmpchar);
 		*config_dir = (char *) malloc(tmpsize +
 					     sizeof("/" PACKAGE_NAME "/"));
-		if (*config_dir == NULL) {
+		if (!*config_dir) {
 			log_error("Setting configdir");
 			return 1;
 		}
@@ -89,8 +89,8 @@ static int set_directories(char **config_dir, char **data_dir)
 
 	/* data directory */
 	tmpchar = getenv("XDG_DATA_HOME");
-	if (tmpchar == NULL || tmpchar[0] == '\0') {
-		if (homedir == NULL && set_homedir(&homedir)) {
+	if (!tmpchar || tmpchar[0] == '\0') {
+		if (!homedir && set_homedir(&homedir)) {
 			free(config_dir);
 			return 1;
 		}
@@ -98,7 +98,7 @@ static int set_directories(char **config_dir, char **data_dir)
 		*data_dir = (char *) malloc(tmpsize +
 					   sizeof("/.local/share/" PACKAGE_NAME
 						  "/"));
-		if (*data_dir == NULL) {
+		if (!*data_dir) {
 			log_error("Setting datadir");
 			free(config_dir);
 			return 1;
@@ -109,7 +109,7 @@ static int set_directories(char **config_dir, char **data_dir)
 		tmpsize = strlen(tmpchar);
 		*data_dir = (char *) malloc(tmpsize +
 					   sizeof("/" PACKAGE_NAME "/"));
-		if (*data_dir == NULL) {
+		if (!*data_dir) {
 			log_error("Setting datadir");
 			free(config_dir);
 			return 1;

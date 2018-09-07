@@ -33,12 +33,10 @@ typedef struct s_keypair {
 void generate_keypair(keypair_t *keypair);
 
 uint32_t get_random_uint32_t(uint32_t upper_bound);
-
 uint64_t get_random_uint64_t(void);
 
 int hash_message(const char		*string_message,
 		 unsigned char		hash[crypto_generichash_BYTES]);
-
 void sign_message(const char		*string_message,
 		  const unsigned char	secret_key[crypto_box_SECRETKEYBYTES],
 		  unsigned char		signature[crypto_sign_BYTES]);
