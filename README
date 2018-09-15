@@ -1,2 +1,9 @@
-Coincer
-=======
+# Coincer
+
+## Terminology
+- Host: A device that is possibly connected to the Coincer network
+- Identifier: The public key of a cryptographic keypair
+- Identity: A peer representation that we own (identifier + its corresponding secret key)
+- Neighbour: A host that we are interconnected with
+- Nonce: Ever-increasing integer tied to every message sent for message repetiton or replay attack detection
+- Peer: The Coincer network participant

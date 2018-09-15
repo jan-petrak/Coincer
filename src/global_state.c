@@ -23,6 +23,7 @@
 #include "log.h"
 #include "neighbours.h"
 #include "paths.h"
+#include "peers.h"
 
 /**
  * Clear global state variables.
@@ -32,10 +33,12 @@
 void global_state_clear(global_state_t *global_state)
 {
 	linkedlist_destroy(&global_state->pending_neighbours, clear_neighbour);
+	linkedlist_destroy(&global_state->peers, peer_clear);
 	linkedlist_destroy(&global_state->neighbours, clear_neighbour);
 	linkedlist_destroy(&global_state->hosts, NULL);
 	/* event nodes' data are not malloc'd; just apply the removal */
 	linkedlist_apply(&global_state->events, event_free, linkedlist_remove);
+	linkedlist_destroy(&global_state->identities, NULL);
 
 	clear_paths(&global_state->filepaths);
 	event_base_free(global_state->event_loop);
@@ -54,9 +57,18 @@ int global_state_init(global_state_t *global_state)
 		return 1;
 	}
 
+	linkedlist_init(&global_state->identities);
+	if (!(global_state->true_identity = identity_generate(0x00))) {
+		log_error("Creating our true identity");
+		return 1;
+	}
+	linkedlist_append(&global_state->identities,
+			  global_state->true_identity);
+
 	linkedlist_init(&global_state->events);
 	linkedlist_init(&global_state->hosts);
 	linkedlist_init(&global_state->neighbours);
+	linkedlist_init(&global_state->peers);
 	linkedlist_init(&global_state->pending_neighbours);
 
 	return 0;

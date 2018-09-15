@@ -23,6 +23,7 @@
 
 #include "linkedlist.h"
 #include "paths.h"
+#include "peers.h"
 
 /**
  * Event loop works with the data stored in an instance of this struct.
@@ -36,10 +37,16 @@ typedef struct s_global_state {
 	filepaths_t filepaths;
 	/** Linked list of some known hosts in the network. */
 	linkedlist_t hosts;
+	/** List of our identities. */
+	linkedlist_t identities;
 	/** Linked list of our neighbours. */
 	linkedlist_t neighbours;
+	/** Known peers. */
+	linkedlist_t peers;
 	/** Hosts that didn't accept/reject us yet. */
 	linkedlist_t pending_neighbours;
+	/** Our true identity. */
+	identity_t *true_identity;
 } global_state_t;
 
 void global_state_clear(global_state_t *global_state);

@@ -25,6 +25,7 @@
 
 #include "hosts.h"
 #include "linkedlist.h"
+#include "peers.h"
 
 /** Request for addresses. */
 #define NEIGHBOUR_ADDRS_REQ	0x01
@@ -42,8 +43,12 @@ typedef struct s_neighbour {
 	int flags;
 	/** Corresponding host. */
 	host_t *host;
+	/** Our peer pseudonym for this neighbour. */
+	identity_t my_pseudonym;
 	/** Neighbour's node in the neighbours container. */
 	linkedlist_node_t *node;
+	/** Neighbour's peer pseudonym for us. */
+	peer_t pseudonym;
 } neighbour_t;
 
 neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
@@ -58,6 +63,11 @@ int compare_neighbour_addrs(const neighbour_t		*neighbour,
 int compare_neighbour_bufferevents(const neighbour_t		*neighbour,
 				   const struct bufferevent	*bev);
 
+int compare_neighbour_my_pseudonyms(const neighbour_t *neighbour,
+				    unsigned char     *public_key);
+
+int compare_neighbour_pseudonyms(const neighbour_t *neighbour,
+				 unsigned char	   *public_key);
 
 int fetch_specific_neighbours(const linkedlist_t	*neighbours,
 			      neighbour_t		***output,

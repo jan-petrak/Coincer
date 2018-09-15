@@ -19,13 +19,16 @@
 #include <assert.h>
 #include <event2/bufferevent.h>
 #include <netinet/in.h>
+#include <sodium.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "crypto.h"
 #include "linkedlist.h"
 #include "log.h"
 #include "neighbours.h"
+#include "peers.h"
 
 /**
  * Add new neighbour into neighbours.
@@ -65,6 +68,17 @@ neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
 	new_neighbour->failed_pings = 0;
 	new_neighbour->flags = 0x0;
 	new_neighbour->host = NULL;
+	/* create our pseudonym */
+	generate_keypair(&new_neighbour->my_pseudonym.keypair);
+	new_neighbour->my_pseudonym.nonce_value = get_random_uint64_t();
+	/* initialize neighbour's pseudonym */
+	memset(new_neighbour->pseudonym.identifier,
+	       0x0,
+	       crypto_box_PUBLICKEYBYTES);
+	linkedlist_init(&new_neighbour->pseudonym.nonces);
+	memset(&new_neighbour->pseudonym.presence_nonce,
+	       0x0,
+	       sizeof(nonce_t));
 
 	if (!(new_neighbour->node = linkedlist_append(neighbours,
 						      new_neighbour))) {
@@ -84,6 +98,7 @@ neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
 void clear_neighbour(neighbour_t *neighbour)
 {
 	bufferevent_free(neighbour->buffer_event);
+	peer_clear(&neighbour->pseudonym);
 }
 
 /**
@@ -115,6 +130,42 @@ int compare_neighbour_bufferevents(const neighbour_t		*neighbour,
 				   const struct bufferevent	*bev)
 {
 	return neighbour->buffer_event != bev;
+}
+
+/**
+ * Comparing function between our neighbour-specific pseudonym and a public key.
+ *
+ * @param	neighbour	Use this neighbour.
+ * @param	public_key	Compare to this public key.
+ *
+ * @return	0		The public keys equal.
+ * @return	<0		'public_key' is greater.
+ * @return	>0		The pseudonym's public key is greater.
+ */
+int compare_neighbour_my_pseudonyms(const neighbour_t *neighbour,
+				    unsigned char     *public_key)
+{
+	return memcmp(neighbour->my_pseudonym.keypair.public_key,
+		      public_key,
+		      crypto_box_PUBLICKEYBYTES);
+}
+
+/**
+ * Comparing function between neighbour's pseudonym and a public key.
+ *
+ * @param	neighbour	Use this neighbour.
+ * @param	public_key	Compare to this public key.
+ *
+ * @return	0		The public keys equal.
+ * @return	<0		'public_key' is greater.
+ * @return	>0		The pseudonym's public key is greater.
+ */
+int compare_neighbour_pseudonyms(const neighbour_t *neighbour,
+				 unsigned char	   *public_key)
+{
+	return memcmp(neighbour->pseudonym.identifier,
+		      public_key,
+		      crypto_box_PUBLICKEYBYTES);
 }
 
 /**

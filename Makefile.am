@@ -15,7 +15,8 @@ src_coincerd_SOURCES = \
 	src/log.c src/log.h \
 	src/neighbours.c src/neighbours.h \
 	src/p2p.c src/p2p.h \
-	src/paths.c src/paths.h
+	src/paths.c src/paths.h \
+	src/peers.c src/peers.h
 
 src_coincerd_CFLAGS = $(AM_CFLAGS) $(JANSSON_CFLAGS) $(LIBEVENT_CFLAGS) $(LIBSODIUM_CFLAGS)
 src_coincerd_LDADD  = $(AM_LDADD) $(JANSSON_LIBS) $(LIBEVENT_LIBS) $(LIBSODIUM_LIBS)
