@@ -65,6 +65,7 @@ neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
 	/* initialize new neighbour */
 	memcpy(&new_neighbour->addr, addr, sizeof(struct in6_addr));
 	new_neighbour->buffer_event = bev;
+	new_neighbour->client = NULL;
 	new_neighbour->failed_pings = 0;
 	new_neighbour->flags = 0x0;
 	new_neighbour->host = NULL;
@@ -98,6 +99,9 @@ neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
 void clear_neighbour(neighbour_t *neighbour)
 {
 	bufferevent_free(neighbour->buffer_event);
+	if (neighbour->client) {
+		free(neighbour->client);
+	}
 	peer_clear(&neighbour->pseudonym);
 }
 

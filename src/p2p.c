@@ -16,8 +16,6 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define _POSIX_SOURCE		/* strtok_r */
-
 #include <arpa/inet.h>		/* inet_ntop */
 #include <assert.h>
 #include <errno.h>
@@ -30,6 +28,7 @@
 #include <string.h>
 
 #include "crypto.h"
+#include "daemon_messages_processor.h"
 #include "global_state.h"
 #include "hosts.h"
 #include "linkedlist.h"
@@ -50,32 +49,6 @@ static void ip_to_string(const struct in6_addr *binary_ip, char *ip)
 }
 
 /**
- * Process received list of host addresses.
- *
- * @param	global_state	Data for the event loop to work with.
- * @param	hosts		'\n'-separated list of host addresses.
- */
-static void process_hosts(global_state_t *global_state, char *hosts)
-{
-	struct in6_addr	addr;
-	const char	delim[2] = "\n";
-	char		*line;
-	char		*save_ptr;
-
-	line = strtok_r(hosts, delim, &save_ptr);
-
-	while (line) {
-		if (inet_pton(AF_INET6, line, &addr) == 1) {
-			save_host(&global_state->hosts,
-				  &addr,
-				  DEFAULT_PORT,
-				  HOST_AVAILABLE);
-		}
-		line = strtok_r(NULL, delim, &save_ptr);
-	}
-}
-
-/**
  * Processing a P2P message.
  *
  * @param	bev	Buffer to read data from.
@@ -83,14 +56,11 @@ static void process_hosts(global_state_t *global_state, char *hosts)
  */
 static void p2p_process(struct bufferevent *bev, void *ctx)
 {
-	char		*addrs = NULL;
 	global_state_t	*global_state;
 	struct evbuffer	*input;
 	size_t		len;
-	char		*message;
+	char		*json_message;
 	neighbour_t	*neighbour;
-	struct evbuffer	*output;
-	char		response[2048]; /* TODO: adjust size */
 	char		text_ip[INET6_ADDRSTRLEN];
 
 	global_state = (global_state_t *) ctx;
@@ -101,67 +71,37 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
 				   compare_neighbour_bufferevents);
 	assert(neighbour != NULL);
 
-	/* reset neighbour's failed pings */
-	neighbour->failed_pings = 0;
-
-	/* read from the input buffer, write to output buffer */
-	input	= bufferevent_get_input(bev);
-	output	= bufferevent_get_output(bev);
+	/* read from the input buffer */
+	input = bufferevent_get_input(bev);
 
 	/* get length of the input message */
 	len = evbuffer_get_length(input);
 
 	/* allocate memory for the input message including '\0' */
-	message = (char *) malloc((len + 1) * sizeof(char));
-	if (!message) {
+	json_message = (char *) malloc((len + 1) * sizeof(char));
+	if (!json_message) {
 		log_error("Received message allocation");
 		return;
 	}
 
 	/* drain input buffer into data; -1 if evbuffer_remove failed */
-	if (evbuffer_remove(input, message, len) == -1) {
-		free(message);
+	if (evbuffer_remove(input, json_message, len) == -1) {
+		free(json_message);
 		return;
 	} else {
-		message[len] = '\0';
+		json_message[len] = '\0';
 	}
 
 	ip_to_string(&neighbour->addr, text_ip);
-	log_debug("p2p_process - received: %s from %s", message, text_ip);
+	log_debug("p2p_process - received: %s from %s", json_message, text_ip);
 
-	response[0] = '\0';
-
-	/* TODO: Replace with JSON messages */
-	if (strcmp(message, "ping") == 0) {
-		strcpy(response, "pong");
-	/* ignore "pong" */
-	} else if (strcmp(message, "pong") == 0) {
-	/* "hosts" is a request for list of addresses */
-	} else if (strcmp(message, "hosts") == 0) {
-		hosts_to_str(&global_state->hosts, &addrs);
-	/* list of addresses */
-	} else {
-		if (neighbour->flags & NEIGHBOUR_ADDRS_REQ) {
-			process_hosts(global_state, message);
-			unset_neighbour_flags(neighbour, NEIGHBOUR_ADDRS_REQ);
-		}
+	if (process_encoded_message(json_message,
+				    neighbour,
+				    global_state) != PMR_DONE) {
+		log_warn("Message processing has failed");
 	}
 
-	if (response[0] != '\0') {
-		log_debug("p2p_process - responding with: %s", response);
-		/* copy response to the output buffer */
-		evbuffer_add_printf(output, "%s", response);
-	/* note: this will be replaced in the next commit */
-	} else if (addrs) {
-		log_debug("p2p_process - responding with: %s", addrs);
-		/* copy response to the output buffer */
-		evbuffer_add_printf(output, "%s", addrs);
-
-		free(addrs);
-	}
-
-	/* deallocate input message */
-	free(message);
+	free(json_message);
 }
 
 /**

@@ -29,6 +29,9 @@
 
 /** Request for addresses. */
 #define NEIGHBOUR_ADDRS_REQ	0x01
+/** Practically, this means that we've received p2p.hello from this
+ *  neighbour (and so we know their pseudonym). */
+#define NEIGHBOUR_ACTIVE	0x02
 
 /** Data type for the linkedlist of neighbours. */
 typedef struct s_neighbour {
@@ -37,6 +40,8 @@ typedef struct s_neighbour {
 	struct in6_addr addr;
 	/** Bufferevent belonging to this neighbour. */
 	struct bufferevent *buffer_event;
+	/** Client info. */
+	char *client;
 	/** Number of failed ping attempts -- max 3, then disconnect. */
 	size_t failed_pings;
 	/** A set of flags for this neighbour. */

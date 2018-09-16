@@ -16,6 +16,8 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _BSD_SOURCE /* snprintf */
+
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -136,49 +138,95 @@ host_t *find_host(const linkedlist_t	*hosts,
 }
 
 /**
- * '\n' separated output string of host addresses in readable form.
+ * Fetch output string of hosts. For every host get its address in readable
+ * form and its port. Output format: [ [ addr, port ], ... ].
  *
- * @param	hosts	List of hosts.
- * @param	output	Output string.
+ * @param	hosts		List of hosts.
+ * @param	output		'\0' terminated, dynamically allocated, output
+ *				string of hosts.
  *
- * @return	0	Success.
- * @return	1	Failure.
+ * @return	0		Success.
+ * @return	1		Failure.
  */
 int hosts_to_str(const linkedlist_t *hosts, char **output)
 {
-	linkedlist_node_t	*current_node;
+	const char		*closing = " ]";
 	host_t			*current_host;
-	size_t			output_size = 0;
+	linkedlist_node_t	*current_node;
+	char			line[64];
+	const char		*opening = "[ ";
+	size_t			opening_len;
+	size_t			output_buff_size;
+	size_t			output_size;
+	const char		*separator = ", ";
+	size_t			separator_len;
 	char			text_ip[INET6_ADDRSTRLEN];
 
-	/* TODO: Don't assume any buffer size. This will be fixed in the
-	 * 	 next commit. */
-	*output = (char *) malloc(4096 * sizeof(char));
+	opening_len   = strlen(opening);
+	separator_len = strlen(separator);
+
+	output_size = 0;
+	output_buff_size = 1024;
+
+	*output = (char *) malloc(output_buff_size * sizeof(char));
 	if (!*output) {
-		log_error("Hosts to string");
+		log_error("Allocating string of hosts");
 		return 1;
 	}
 
-	*output[0] = '\0';
+	(*output)[output_size++] = '\0';
+
+	/* opening of the outer list */
+	strcat(*output, opening);
+	output_size += opening_len;
+
 	current_node = linkedlist_get_first(hosts);
-	while (current_node != NULL) {
+	while (current_node) {
 		current_host = (host_t *) current_node->data;
+
+		/* IPv6 can have max 45 chars, port 5, both opening and closing
+		 * of the inner list 2 each, the separator 2, possible closing
+		 * of the outer list 2, and '\0' 1 => max 59 chars, hence 128
+		 * has to be enough as a buffer size reserve. */
+		if (output_buff_size - output_size < 128) {
+			output_buff_size *= 2;
+
+			*output = (char *) realloc(*output, output_buff_size *
+							    sizeof(char));
+			if (!*output) {
+				log_error("Reallocating string of hosts");
+				return 1;
+			}
+		}
 
 		/* binary ip to text ip conversion */
 		inet_ntop(AF_INET6,
 			  &current_host->addr,
 			  text_ip,
 			  INET6_ADDRSTRLEN);
-		output_size += strlen(text_ip);
-		strcat(*output, text_ip);
 
 		current_node = linkedlist_get_next(hosts, current_node);
-		/* if it's not the last host, append '\n' */
-		if (current_node != NULL) {
-			*output[output_size++] = '\n';
+
+		/* [ addr, port ] into 'line', 64 has to be enough from
+		 * the reason described above */
+		if (snprintf(line, 64, "%s%s%s%hu%s", opening,
+						  text_ip,
+						  separator,
+						  current_host->port,
+						  closing) <= 59) {
+
+			strcat(*output, line);
+			output_size += strlen(line);
+			/* not the last host => append inner lists separator */
+			if (current_node) {
+				strcat(*output, separator);
+				output_size += separator_len;
+			}
 		}
-		*output[output_size] = '\0';
 	}
+
+	/* closing of the outer list */
+	strcat(*output, closing);
 
 	return 0;
 }
