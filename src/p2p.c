@@ -36,6 +36,7 @@
 #include "log.h"
 #include "neighbours.h"
 #include "p2p.h"
+#include "routing.h"
 
 /**
  * Simple helper for conversion of binary IP to readable IP address.
@@ -46,27 +47,6 @@
 static void ip_to_string(const struct in6_addr *binary_ip, char *ip)
 {
 	inet_ntop(AF_INET6, binary_ip, ip, INET6_ADDRSTRLEN);
-}
-
-/**
- * Ask a neighbour for a list of addresses.
- *
- * @param	global_state	Data for the event loop to work with.
- * @param	neighbour	The neighbour to be asked.
- */
-static void ask_for_addresses(neighbour_t *neighbour)
-{
-	struct bufferevent *bev;
-
-	if (!neighbour || !(bev = neighbour->buffer_event)) {
-		return;
-	}
-
-	/* send message "hosts" to the neighbour, as a request
-	 * for the list of hosts; 6 is the number of bytes to be transmitted */
-	evbuffer_add(bufferevent_get_output(bev), "hosts", 6);
-	/* accept addresses only from those neighbours that we've asked */
-	set_neighbour_flags(neighbour, NEIGHBOUR_ADDRS_REQ);
 }
 
 /**
@@ -86,7 +66,10 @@ static void process_hosts(global_state_t *global_state, char *hosts)
 
 	while (line) {
 		if (inet_pton(AF_INET6, line, &addr) == 1) {
-			save_host(&global_state->hosts, &addr);
+			save_host(&global_state->hosts,
+				  &addr,
+				  DEFAULT_PORT,
+				  HOST_AVAILABLE);
 		}
 		line = strtok_r(NULL, delim, &save_ptr);
 	}
@@ -186,9 +169,11 @@ static void p2p_process(struct bufferevent *bev, void *ctx)
  *
  * @param	neighbours	Linked list of neighbours.
  * @param	neighbour	Timeout invoked on this neighbour.
+ * @param	routing_table	Routing table.
  */
 static void timeout_process(linkedlist_t	*neighbours,
-			    neighbour_t		*neighbour)
+			    neighbour_t		*neighbour,
+			    linkedlist_t	*routing_table)
 {
 	char text_ip[INET6_ADDRSTRLEN];
 
@@ -204,14 +189,12 @@ static void timeout_process(linkedlist_t	*neighbours,
 		log_debug("timeout_process - sending ping to %s. "
 			  "Failed pings: %lu", text_ip,
 					       neighbour->failed_pings);
-		/* send ping to the inactive neighbour;
-		 * 5 is the length of bytes to be transmitted */
-		evbuffer_add(bufferevent_get_output(neighbour->buffer_event),
-			"ping", 5);
-
+		send_p2p_ping(neighbour);
 		neighbour->failed_pings++;
 	} else {
 		log_info("%s timed out", text_ip);
+		/* remove this neighbour (next hop) from all routes */
+		routing_table_remove_next_hop(routing_table, neighbour);
 		linkedlist_delete_safely(neighbour->node, clear_neighbour);
 	}
 }
@@ -246,13 +229,17 @@ static void process_pending_neighbour(global_state_t	*global_state,
 		/* move the neighbour from pending into neighbours */
 		linkedlist_move(neighbour->node, &global_state->neighbours);
 
+		/* send p2p.hello */
+		send_p2p_hello(neighbour, global_state->port);
+
 		needed_conns = MIN_NEIGHBOURS -
 			       linkedlist_size(&global_state->neighbours);
 		/* if we need more neighbours */
 		if (needed_conns > 0) {
 			/* and we don't have enough hosts available */
 			if (available_hosts_size < needed_conns) {
-				ask_for_addresses(neighbour);
+				/* ask for some */
+				send_p2p_peers_sol(neighbour);
 			}
 		}
 	/* connecting to the neighbour was unsuccessful */
@@ -282,13 +269,23 @@ static void process_neighbour(global_state_t	*global_state,
 
 	if (events & BEV_EVENT_ERROR) {
 		log_info("Connection error, removing %s", text_ip);
+
+		/* remove this neighbour (next hop) from all routes */
+		routing_table_remove_next_hop(&global_state->routing_table,
+					      neighbour);
 		linkedlist_delete_safely(neighbour->node, clear_neighbour);
 	} else if (events & BEV_EVENT_EOF) {
 		log_info("%s disconnected", text_ip);
+
+		/* remove this neighbour (next hop) from all routes */
+		routing_table_remove_next_hop(&global_state->routing_table,
+					      neighbour);
 		linkedlist_delete_safely(neighbour->node, clear_neighbour);
 	/* timeout flag on 'bev' */
 	} else if (events & BEV_EVENT_TIMEOUT) {
-		timeout_process(&global_state->neighbours, neighbour);
+		timeout_process(&global_state->neighbours,
+				neighbour,
+				&global_state->routing_table);
 	}
 }
 
@@ -341,6 +338,7 @@ static void accept_connection(struct evconnlistener *listener,
 	neighbour_t		*neigh;
 	struct in6_addr		*new_addr;
 	host_t			*host;
+	unsigned short		port;
 	char			text_ip[INET6_ADDRSTRLEN];
 	struct timeval		timeout;
 
@@ -349,6 +347,7 @@ static void accept_connection(struct evconnlistener *listener,
 
 	/* put binary representation of IP to 'new_addr' */
 	new_addr = &addr_in6->sin6_addr;
+	port	 = addr_in6->sin6_port;
 
 	ip_to_string(new_addr, text_ip);
 
@@ -390,7 +389,7 @@ static void accept_connection(struct evconnlistener *listener,
 	log_info("New connection from [%s]:%d", text_ip,
 		ntohs(addr_in6->sin6_port));
 
-	host = save_host(&global_state->hosts, new_addr);
+	host = save_host(&global_state->hosts, new_addr, port, 0x0);
 	if (!host) {
 		host = find_host(&global_state->hosts, new_addr);
 	}
@@ -441,7 +440,7 @@ int listen_init(struct evconnlistener 	**listener,
 	struct event_base **base = &global_state->event_loop;
 	struct sockaddr_in6 sock_addr;
 
-	int port = DEFAULT_PORT;
+	int port = global_state->port = DEFAULT_PORT;
 
 	*base = event_base_new();
 	if (!*base) {
@@ -473,18 +472,20 @@ int listen_init(struct evconnlistener 	**listener,
 }
 
 /**
- * Attempt to connect to a particular addr.
+ * Attempt to connect to a particular host.
  *
  * @param	global_state	Data for the event loop to work with.
  * @param	addr		Binary IP of a host that we want to connect to.
+ * @param	port		Host's listening port.
  *
  * @return	0		The connection attempt was successful.
  * @return	1		The host is already our neighbour.
  * @return	2		The host is pending to become our neighbour.
  * @return	3		Adding new pending neighbour unsuccessful.
  */
-int connect_to_addr(global_state_t		*global_state,
-		    const struct in6_addr	*addr)
+int connect_to_host(global_state_t		*global_state,
+		    const struct in6_addr	*addr,
+		    unsigned short		port)
 {
 	struct bufferevent	*bev;
 	host_t			*host;
@@ -516,8 +517,8 @@ int connect_to_addr(global_state_t		*global_state,
 
 	memset(&sock_addr6, 0x0, sizeof(sock_addr6));
 	sock_addr6.sin6_family = AF_INET6;
-	sock_addr6.sin6_port   = htons(DEFAULT_PORT);
-	memcpy(&sock_addr6.sin6_addr, addr, 16);
+	sock_addr6.sin6_port   = htons(port);
+	memcpy(&sock_addr6.sin6_addr, addr, sizeof(struct in6_addr));
 
 	sock_addr = (struct sockaddr *) &sock_addr6;
 	sock_len  = sizeof(sock_addr6);
@@ -603,14 +604,14 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 			  "connecting to a default host...");
 		/* choose random default host */
 		idx = get_random_uint32_t(DEFAULT_HOSTS_SIZE);
-		memcpy(&addr, DEFAULT_HOSTS[idx], 16);
+		memcpy(&addr, DEFAULT_HOSTS[idx], sizeof(struct in6_addr));
 
 		/* if the host becomes our neighbour, and we need more
 		 * connections, get a list of hosts from them and attempt to
 		 * connect to them; it's our goal to use as few default
 		 * hosts as possible
 		 */
-		result = connect_to_addr(global_state, &addr);
+		result = connect_to_host(global_state, &addr, DEFAULT_PORT);
 
 		/* the host is already our neighbour; ask them for more addrs */
 		if (result == 1) {
@@ -618,7 +619,7 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 					       &addr,
 					       compare_neighbour_addrs);
 			assert(neigh != NULL);
-			ask_for_addresses(neigh);
+			send_p2p_peers_sol(neigh);
 			log_debug("add_more_connections - "
 				  "asking for hosts");
 		}
@@ -635,8 +636,9 @@ void add_more_connections(global_state_t *global_state, size_t conns_amount)
 			idx = cur_conn_attempts;
 			selected_host = available_hosts[idx];
 			/* perform a connection attempt */
-			connect_to_addr(global_state,
-					&selected_host->addr);
+			connect_to_host(global_state,
+					&selected_host->addr,
+					selected_host->port);
 			cur_conn_attempts++;
 		}
 	}

@@ -24,6 +24,7 @@
 #include "neighbours.h"
 #include "paths.h"
 #include "peers.h"
+#include "routing.h"
 
 /**
  * Clear global state variables.
@@ -32,9 +33,11 @@
  */
 void global_state_clear(global_state_t *global_state)
 {
+	linkedlist_destroy(&global_state->routing_table, route_clear);
 	linkedlist_destroy(&global_state->pending_neighbours, clear_neighbour);
 	linkedlist_destroy(&global_state->peers, peer_clear);
 	linkedlist_destroy(&global_state->neighbours, clear_neighbour);
+	linkedlist_destroy(&global_state->message_traces, NULL);
 	linkedlist_destroy(&global_state->hosts, NULL);
 	/* event nodes' data are not malloc'd; just apply the removal */
 	linkedlist_apply(&global_state->events, event_free, linkedlist_remove);
@@ -67,9 +70,13 @@ int global_state_init(global_state_t *global_state)
 
 	linkedlist_init(&global_state->events);
 	linkedlist_init(&global_state->hosts);
+	linkedlist_init(&global_state->message_traces);
 	linkedlist_init(&global_state->neighbours);
 	linkedlist_init(&global_state->peers);
 	linkedlist_init(&global_state->pending_neighbours);
+	linkedlist_init(&global_state->routing_table);
+
+	global_state->port = 0;
 
 	return 0;
 }

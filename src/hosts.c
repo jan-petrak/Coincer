@@ -28,17 +28,6 @@
 #include "log.h"
 
 /**
- * Delete all hosts and their data.
- *
- * @param	hosts	Linkedlist of hosts.
- */
-void clear_hosts(linkedlist_t *hosts)
-{
-	/* host_t has no dynamically allocated variables */
-	linkedlist_destroy(hosts, NULL);
-}
-
-/**
  * Fetch hosts from file into linkedlist.
  *
  * @param	hosts_path	Path to hosts file.
@@ -49,7 +38,7 @@ void clear_hosts(linkedlist_t *hosts)
  */
 int fetch_hosts(const char *hosts_path, linkedlist_t *hosts)
 {
-	struct in6_addr	addr;
+	host_t		current_host;
 	FILE		*hosts_file;
 
 	hosts_file = fopen(hosts_path, "rb");
@@ -59,8 +48,11 @@ int fetch_hosts(const char *hosts_path, linkedlist_t *hosts)
 		return 1;
 	}
 
-	while (fread(&addr, sizeof(struct in6_addr), 1, hosts_file) == 1) {
-		save_host(hosts, &addr);
+	while (fread(&current_host, sizeof(host_t), 1, hosts_file) == 1) {
+		save_host(hosts,
+			  &current_host.addr,
+			  current_host.port,
+			  current_host.flags);
 	}
 
 	fclose(hosts_file);
@@ -194,14 +186,19 @@ int hosts_to_str(const linkedlist_t *hosts, char **output)
 /**
  * Save new host into sorted linkedlist of hosts.
  *
- * @param	hosts			The linkedlist of hosts.
- * @param	addr			Address of the new host.
+ * @param	hosts		The linkedlist of hosts.
+ * @param	addr		Address of the new host.
+ * @param	port		Host's listening port.
+ * @param	flags		Host's flags.
  *
- * @return	host_t			Newly saved host.
- * @return	NULL			Host is already saved, default or
- *					allocation failure.
+ * @return	host_t		Newly saved host.
+ * @return	NULL		Host is already saved, default or
+ *				allocation failure.
  */
-host_t *save_host(linkedlist_t *hosts, const struct in6_addr *addr)
+host_t *save_host(linkedlist_t		*hosts,
+		  const struct in6_addr *addr,
+		  unsigned short	port,
+		  int			flags)
 {
 	int			cmp_value;
 	struct in6_addr		curr_addr;
@@ -230,7 +227,9 @@ host_t *save_host(linkedlist_t *hosts, const struct in6_addr *addr)
 
 	/* initialize all attributes of the new host */
 	memcpy(&new_host->addr, addr, 16);
-	set_host_flags(new_host, HOST_AVAILABLE);
+	new_host->port = port;
+	new_host->flags = 0x0;
+	set_host_flags(new_host, flags);
 
 	/* get textual representation of 'addr' */
 	inet_ntop(AF_INET6, addr, text_ip, INET6_ADDRSTRLEN);
@@ -330,8 +329,8 @@ int store_hosts(const char *hosts_path, const linkedlist_t *hosts)
 	while (current) {
 		current_host = (host_t *) current->data;
 		/* if fwrite fails, terminate storing */
-		if (fwrite(&current_host->addr,
-			   sizeof(struct in6_addr),
+		if (fwrite(current_host,
+			   sizeof(host_t),
 			   1,
 			   hosts_file) != 1) {
 			log_error("Storing hosts");

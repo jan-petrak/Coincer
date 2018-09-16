@@ -56,10 +56,10 @@ typedef struct s_host {
 	struct in6_addr	addr;
 	/** A set of flags for this host. */
 	int flags;
+	/* Host's listening port. */
+	unsigned short port;
 	/* TODO: add uptime */
 } host_t;
-
-void clear_hosts(linkedlist_t *hosts);
 
 int fetch_hosts(const char *hosts_path, linkedlist_t *hosts);
 
@@ -74,7 +74,10 @@ int hosts_to_str(const linkedlist_t *hosts, char **output);
 
 void reset_hosts_availability(linkedlist_t *hosts);
 
-host_t *save_host(linkedlist_t *hosts, const struct in6_addr *addr);
+host_t *save_host(linkedlist_t		*hosts,
+		  const struct in6_addr	*addr,
+		  unsigned short	port,
+		  int			flags);
 
 void set_host_flags(host_t *host, int flags);
 

@@ -26,15 +26,21 @@
 #include "neighbours.h"
 #include "p2p.h"
 #include "peers.h"
+#include "routing.h"
 
 /** The time interval in seconds between loop_update_long calls. */
 #define UPDATE_TIME_LONG	60
+/** The time interval in seconds between loop_update_medium calls. */
+#define UPDATE_TIME_MEDIUM	30
 /** The time interval in seconds between loop_update_short calls. */
 #define UPDATE_TIME_SHORT	10
 
 static void loop_update_long(evutil_socket_t	fd     __attribute__((unused)),
 			     short		events __attribute__((unused)),
 			     void		*ctx);
+static void loop_update_medium(evutil_socket_t	fd     __attribute__((unused)),
+			       short		events __attribute__((unused)),
+			       void		*ctx);
 static void loop_update_short(evutil_socket_t	fd     __attribute__((unused)),
 			      short		events __attribute__((unused)),
 			      void		*ctx);
@@ -57,7 +63,8 @@ static void connections_maintain(global_state_t *global_state)
 	needed_conns = MIN_NEIGHBOURS -
 		       linkedlist_size(&global_state->neighbours);
 	if (needed_conns > 0) {
-		log_debug("conns_cb - need %d more neighbours", needed_conns);
+		log_debug("connections_maintain - need %d more neighbours",
+			  needed_conns);
 		/* ask twice more hosts than we need; it's preferable
 		 * to have more neighbours than minimum */
 		add_more_connections(global_state, 2 * needed_conns);
@@ -120,6 +127,23 @@ int daemon_events_setup(global_state_t *global_state)
 		return 1;
 	}
 
+	/* register the medium time-interval loop updates */
+	interval.tv_sec  = UPDATE_TIME_MEDIUM;
+	interval.tv_usec = 0;
+
+	event = event_new(global_state->event_loop,
+			  -1,
+			  EV_PERSIST,
+			  loop_update_medium,
+			  global_state);
+
+	if (!event ||
+	    event_add(event, &interval) < 0 ||
+	    !linkedlist_append(events, event)) {
+		log_error("Creating or adding medium loop update callback");
+		return 1;
+	}
+
 	/* register the long time-interval loop updates */
 	interval.tv_sec  = UPDATE_TIME_LONG;
 	interval.tv_usec = 0;
@@ -157,6 +181,25 @@ static void loop_update_long(evutil_socket_t	fd     __attribute__((unused)),
 }
 
 /**
+ * The medium time-triggered loop update.
+ *
+ * @param	fd	File descriptor.
+ * @param	events	Event flags.
+ * @param	ctx	Global state.
+ */
+static void loop_update_medium(evutil_socket_t	fd     __attribute__((unused)),
+			       short		events __attribute__((unused)),
+			       void		*ctx)
+{
+	global_state_t *global_state = (global_state_t *) ctx;
+
+	if (linkedlist_size(&global_state->neighbours) >= MIN_NEIGHBOURS) {
+		send_p2p_route_adv(&global_state->neighbours,
+				   global_state->true_identity);
+	}
+}
+
+/**
  * The short time-triggered loop update.
  *
  * @param	fd	File descriptor.
@@ -184,9 +227,17 @@ static void remove_stale_records(global_state_t *global_state)
 	neighbour_t		*current_neighbour;
 	linkedlist_node_t	*current_node;
 	peer_t			*current_peer;
+	time_t			current_time;
 	linkedlist_node_t	*next_node;
 
 	current_time = time(NULL);
+
+	/* if a route is stale, delete it from the routing table */
+	linkedlist_apply_if(&global_state->routing_table,
+			    &current_time,
+			    route_is_stale,
+			    route_clear,
+			    linkedlist_delete);
 
 	/* remove stale nonces of known peers */
 	current_list = &global_state->peers;
@@ -210,6 +261,13 @@ static void remove_stale_records(global_state_t *global_state)
 		current_node = linkedlist_get_next(current_list, current_node);
 	}
 
+	/* remove stale message traces */
+	linkedlist_apply_if(&global_state->message_traces,
+			    &current_time,
+			    message_trace_is_stale,
+			    NULL,
+			    linkedlist_delete);
+
 	/* remove unneeded identities */
 	current_list = &global_state->identities;
 	current_node = linkedlist_get_first(current_list);
@@ -218,6 +276,8 @@ static void remove_stale_records(global_state_t *global_state)
 		next_node = linkedlist_get_next(current_list, current_node);
 
 		if (current_identity->flags & IDENTITY_TMP) {
+			send_p2p_bye(&global_state->neighbours,
+				     current_identity);
 			linkedlist_delete(current_node);
 		}
 

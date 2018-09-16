@@ -33,8 +33,9 @@
 
 void add_more_connections(global_state_t *global_state, size_t conns_amount);
 
-int connect_to_addr(global_state_t		*global_state,
-		    const struct in6_addr	*addr);
+int connect_to_host(global_state_t		*global_state,
+		    const struct in6_addr	*addr,
+		    unsigned short		port);
 
 int listen_init(struct evconnlistener	**listener,
 		global_state_t		*global_state);

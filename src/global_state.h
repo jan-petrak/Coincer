@@ -39,12 +39,19 @@ typedef struct s_global_state {
 	linkedlist_t hosts;
 	/** List of our identities. */
 	linkedlist_t identities;
+	/** Linked list of recently received message traces (their hash and
+	 * a pointer to a neighbour who's sent us the message). */
+	linkedlist_t message_traces;
 	/** Linked list of our neighbours. */
 	linkedlist_t neighbours;
 	/** Known peers. */
 	linkedlist_t peers;
 	/** Hosts that didn't accept/reject us yet. */
 	linkedlist_t pending_neighbours;
+	/** We listen on this port. */
+	unsigned short port;
+	/** Routes to hosts. */
+	linkedlist_t routing_table;
 	/** Our true identity. */
 	identity_t *true_identity;
 } global_state_t;
