@@ -234,8 +234,8 @@ static enum process_message_result process_message(
 
 	/* nonce parity check; the message must have:
 	 * sender ID > our ID => odd nonce; sender ID < our ID => even nonce */
-	if ((cmp_val > 0 && nonce_value % 2 == 0) ||
-	    (cmp_val < 0 && nonce_value % 2 == 1)) {
+	if ((cmp_val > 0 && !(nonce_value & 0x01)) ||
+	    (cmp_val < 0 && (nonce_value & 0x01))) {
 		log_debug("process_mesage - wrong nonce parity");
 		return PMR_ERR_SEMANTIC;
 	}
@@ -279,8 +279,8 @@ static enum process_message_result process_message(
 			}
 			/* if the message smells like replay attack */
 			if (!linkedlist_empty(&sender_peer->nonces) &&
-			     nonce_value <
-			    (nonces_get_first(&sender_peer->nonces))->value) {
+			    nonce_value <
+			    (nonces_get_oldest(&sender_peer->nonces))->value) {
 				log_warn("Potential replay attack detected");
 				return PMR_ERR_SEMANTIC;
 			}
@@ -648,29 +648,30 @@ static int process_p2p_route_sol(const message_t *message,
 	identity_t 	*identity;
 	p2p_route_sol_t *route_sol;
 
-	route_sol  = (p2p_route_sol_t *) message->body.data;
+	route_sol = (p2p_route_sol_t *) message->body.data;
 	identity = identity_find(&global_state->identities, route_sol->target);
 
 	/* if we wouldn't rebroadcast the p2p.route.sol, and just sent
 	 * a p2p.route.adv, it could be obvious the 'target' is us */
-	if (!message_forward(message, sender, global_state)) {
-		/* if someone's looking for us */
-		if (identity) {
-			if (difftime(identity->last_adv,
-				     time(NULL)) > ADV_GAP_TIME) {
-				/* broadcast the identity */
-				return send_p2p_route_adv(
-						&global_state->neighbours,
-						identity);
-			}
-			/* returning 1 means not storing the message's nonce,
-			 * and so if we receive this message again, we can
-			 * re-check the p2p.route.adv gap time */
-			return 1;
+	if (message_forward(message,
+			    sender,
+			    global_state)) {
+		return 1;
+	}
+	/* if someone's looking for us */
+	if (identity) {
+		if (difftime(time(NULL),
+			     identity->last_adv) > ADV_GAP_TIME) {
+			/* broadcast the identity */
+			return send_p2p_route_adv(
+					&global_state->neighbours,
+					identity);
 		}
-
-		return 0;
+		/* returning 1 means not storing the message's nonce,
+		 * and so if we receive this message again, we can
+		 * re-check the p2p.route.adv gap time */
+		return 1;
 	}
 
-	return 1;
+	return 0;
 }

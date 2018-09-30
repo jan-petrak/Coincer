@@ -180,20 +180,20 @@ static int message_finalize(message_t			*message,
 			 message->body.to,
 			 crypto_box_PUBLICKEYBYTES);
 	/* from ID > to ID => odd nonce; from ID < to ID => even nonce */
-	if ((cmp_val > 0 && nonce_value % 2 == 0) ||
-	    (cmp_val < 0 && nonce_value % 2 == 1)) {
+	if ((cmp_val > 0 && !(nonce_value & 0x01)) ||
+	    (cmp_val < 0 && (nonce_value & 0x01))) {
 		nonce_value++;
 	}
 
 	message->body.nonce = from->nonce_value = nonce_value;
 
-	if (!encode_message_body(&message->body, &json_body)) {
-		sign_message(json_body, from->keypair.secret_key, message->sig);
-		free(json_body);
-		return 0;
+	if (encode_message_body(&message->body, &json_body)) {
+		return 1;
 	}
 
-	return 1;
+	sign_message(json_body, from->keypair.secret_key, message->sig);
+	free(json_body);
+	return 0;
 }
 
 /**
@@ -240,14 +240,14 @@ int message_forward(const message_t	*message,
  */
 static int message_send_n2n(message_t *message, neighbour_t *dest)
 {
-	if (!message_finalize(message,
-			      &dest->my_pseudonym,
-			      dest->pseudonym.identifier,
-			      DV_HIDDEN)) {
-		return message_send_to_neighbour(message, dest);
+	if (message_finalize(message,
+			     &dest->my_pseudonym,
+			     dest->pseudonym.identifier,
+			     DV_HIDDEN)) {
+		return 1;
 	}
 
-	return 1;
+	return message_send_to_neighbour(message, dest);
 }
 
 /**
@@ -632,22 +632,21 @@ int send_p2p_bye(linkedlist_t *neighbours, identity_t *identity)
 	message_t p2p_bye_msg;
 	int	  ret;
 
-	if (!create_p2p_bye(&p2p_bye_msg)) {
-		if (!(ret = message_finalize(&p2p_bye_msg,
-					     identity,
-					     NULL,
-					     DV_HIDDEN))) {
-			/* route as P2P (don't use our neighbour pseudonym) */
-			ret = message_broadcast_p2p(&p2p_bye_msg,
-						    neighbours,
-						    NULL);
-		}
-
-		message_delete(&p2p_bye_msg);
-		return ret;
+	if (create_p2p_bye(&p2p_bye_msg)) {
+		return 1;
+	}
+	if (!(ret = message_finalize(&p2p_bye_msg,
+				     identity,
+				     NULL,
+				     DV_HIDDEN))) {
+		/* route as P2P (don't use our neighbour pseudonym) */
+		ret = message_broadcast_p2p(&p2p_bye_msg,
+					    neighbours,
+					    NULL);
 	}
 
-	return 1;
+	message_delete(&p2p_bye_msg);
+	return ret;
 }
 
 /**
@@ -664,14 +663,13 @@ int send_p2p_hello(neighbour_t *dest, unsigned short port)
 	message_t p2p_hello_msg;
 	int	  ret;
 
-	if (!create_p2p_hello(&p2p_hello_msg, port)) {
-		ret = message_send_n2n(&p2p_hello_msg, dest);
-
-		message_delete(&p2p_hello_msg);
-		return ret;
+	if (create_p2p_hello(&p2p_hello_msg, port)) {
+		return 1;
 	}
+	ret = message_send_n2n(&p2p_hello_msg, dest);
 
-	return 1;
+	message_delete(&p2p_hello_msg);
+	return ret;
 }
 
 /**
@@ -688,14 +686,13 @@ int send_p2p_peers_adv(neighbour_t *dest, const linkedlist_t *hosts)
 	message_t p2p_peers_adv_msg;
 	int	  ret;
 
-	if (!create_p2p_peers_adv(&p2p_peers_adv_msg, hosts)) {
-		ret = message_send_n2n(&p2p_peers_adv_msg, dest);
-
-		message_delete(&p2p_peers_adv_msg);
-		return ret;
+	if (create_p2p_peers_adv(&p2p_peers_adv_msg, hosts)) {
+		return 1;
 	}
+	ret = message_send_n2n(&p2p_peers_adv_msg, dest);
 
-	return 1;
+	message_delete(&p2p_peers_adv_msg);
+	return ret;
 }
 
 /**
@@ -711,16 +708,15 @@ int send_p2p_peers_sol(neighbour_t *dest)
 	message_t p2p_peers_sol_msg;
 	int	  ret;
 
-	if (!create_p2p_peers_sol(&p2p_peers_sol_msg)) {
-		if (!(ret = message_send_n2n(&p2p_peers_sol_msg, dest))) {
-			set_neighbour_flags(dest, NEIGHBOUR_ADDRS_REQ);
-		}
-
-		message_delete(&p2p_peers_sol_msg);
-		return ret;
+	if (create_p2p_peers_sol(&p2p_peers_sol_msg)) {
+		return 1;
+	}
+	if (!(ret = message_send_n2n(&p2p_peers_sol_msg, dest))) {
+		set_neighbour_flags(dest, NEIGHBOUR_ADDRS_REQ);
 	}
 
-	return 1;
+	message_delete(&p2p_peers_sol_msg);
+	return ret;
 }
 
 /**
@@ -736,14 +732,13 @@ int send_p2p_ping(neighbour_t *dest)
 	message_t p2p_ping_msg;
 	int	  ret;
 
-	if (!create_p2p_ping(&p2p_ping_msg)) {
-		ret = message_send_n2n(&p2p_ping_msg, dest);
-
-		message_delete(&p2p_ping_msg);
-		return ret;
+	if (create_p2p_ping(&p2p_ping_msg)) {
+		return 1;
 	}
+	ret = message_send_n2n(&p2p_ping_msg, dest);
 
-	return 1;
+	message_delete(&p2p_ping_msg);
+	return ret;
 }
 
 /**
@@ -759,14 +754,13 @@ int send_p2p_pong(neighbour_t *dest)
 	message_t p2p_pong_msg;
 	int	  ret;
 
-	if (!create_p2p_pong(&p2p_pong_msg)) {
-		ret = message_send_n2n(&p2p_pong_msg, dest);
-
-		message_delete(&p2p_pong_msg);
-		return ret;
+	if (create_p2p_pong(&p2p_pong_msg)) {
+		return 1;
 	}
+	ret = message_send_n2n(&p2p_pong_msg, dest);
 
-	return 1;
+	message_delete(&p2p_pong_msg);
+	return ret;
 }
 
 /**
@@ -783,27 +777,26 @@ int send_p2p_route_adv(linkedlist_t *neighbours, identity_t *identity)
 	message_t p2p_route_adv_msg;
 	int	  ret;
 
-	if (!create_p2p_route_adv(&p2p_route_adv_msg)) {
-		if (!(ret = message_finalize(&p2p_route_adv_msg,
-					     identity,
-					     NULL,
-					     DV_HIDDEN))) {
-			/* timing attack protection */
-			execution_pause_random(250, 2000);
+	if (create_p2p_route_adv(&p2p_route_adv_msg)) {
+		return 1;
+	}
+	if (!(ret = message_finalize(&p2p_route_adv_msg,
+				     identity,
+				     NULL,
+				     DV_HIDDEN))) {
+		/* timing attack protection */
+		execution_pause_random(250, 2000);
 
-			/* route as P2P (don't use our neighbour pseudonym) */
-			if (!(ret = message_broadcast_p2p(&p2p_route_adv_msg,
-							  neighbours,
-							  NULL))) {
-				identity->last_adv = time(NULL);
-			}
+		/* route as P2P (don't use our neighbour pseudonym) */
+		if (!(ret = message_broadcast_p2p(&p2p_route_adv_msg,
+						  neighbours,
+						  NULL))) {
+			identity->last_adv = time(NULL);
 		}
-
-		message_delete(&p2p_route_adv_msg);
-		return ret;
 	}
 
-	return 1;
+	message_delete(&p2p_route_adv_msg);
+	return ret;
 }
 
 /**
@@ -823,22 +816,21 @@ int send_p2p_route_sol(linkedlist_t	   *neighbours,
 	message_t p2p_route_sol_msg;
 	int	  ret;
 
-	if (!create_p2p_route_sol(&p2p_route_sol_msg, target)) {
-		if (!(ret = message_finalize(&p2p_route_sol_msg,
-					     identity,
-					     NULL,
-					     DV_HIDDEN))) {
-			/* route as P2P (don't use our neighbour pseudonym) */
-			ret = message_broadcast_p2p(&p2p_route_sol_msg,
-						    neighbours,
-						    NULL);
-		}
-
-		message_delete(&p2p_route_sol_msg);
-		return ret;
+	if (create_p2p_route_sol(&p2p_route_sol_msg, target)) {
+		return 1;
+	}
+	if (!(ret = message_finalize(&p2p_route_sol_msg,
+				     identity,
+				     NULL,
+				     DV_HIDDEN))) {
+		/* route as P2P (don't use our neighbour pseudonym) */
+		ret = message_broadcast_p2p(&p2p_route_sol_msg,
+					    neighbours,
+					    NULL);
 	}
 
-	return 1;
+	message_delete(&p2p_route_sol_msg);
+	return ret;
 }
 
 /**

@@ -161,6 +161,7 @@ int nonce_store(linkedlist_t *nonces, uint64_t value)
 	}
 
 	nonce->value = value;
+	nonce->creation = time(NULL);
 
 	/* place the nonce into appropriate position */
 	cur_node = linkedlist_get_last(nonces);
@@ -168,9 +169,7 @@ int nonce_store(linkedlist_t *nonces, uint64_t value)
 		cur_nonce = (nonce_t *) cur_node->data;
 		/* appropriate position found */
 		if (value > cur_nonce->value) {
-			if (cur_node == linkedlist_get_last(nonces)) {
-				nonce->creation = time(NULL);
-			} else {
+			if (cur_node != linkedlist_get_last(nonces)) {
 				nonce->creation = cur_nonce->creation;
 			}
 
@@ -188,20 +187,14 @@ int nonce_store(linkedlist_t *nonces, uint64_t value)
 
 	/* at this point we know the nonce should be placed at the beginning
 	 * of the container; do that only if the container is empty */
-	if (linkedlist_empty(nonces)) {
-		nonce->creation = time(NULL);
-
-		if (!linkedlist_insert_after(nonces, &nonces->first, nonce)) {
-			log_error("Storing a nonce");
-			free(nonce);
-			return 1;
-		}
-
-		return 0;
+	if (!linkedlist_empty(nonces) ||
+	    !linkedlist_insert_after(nonces, &nonces->first, nonce)) {
+		log_error("Storing a nonce");
+		free(nonce);
+		return 1;
 	}
 
-	free(nonce);
-	return 1;
+	return 0;
 }
 
 /**
@@ -234,34 +227,35 @@ nonce_t *nonces_find(const linkedlist_t *nonces, uint64_t value)
 }
 
 /**
- * Get the first nonce (the nonce with the lowest value) from a list of nonces.
- *
- * @param	nonces		Use these nonces.
- *
- * @return	nonce_t		The first nonce.
- * @return	NULL		The nonces are empty.
- */
-nonce_t *nonces_get_first(const linkedlist_t *nonces)
-{
-	linkedlist_node_t *node;
-	if ((node = linkedlist_get_first(nonces))) {
-		return node->data;
-	}
-	return NULL;
-}
-
-/**
- * Get the last nonce (the nonce with the highest value) from a list of nonces.
+ * Get the newest nonce (the nonce with the highest value) from a list
+ * of nonces.
  *
  * @param	nonces		Use these nonces.
  *
  * @return	nonce_t		The last nonce.
  * @return	NULL		The nonces are empty.
  */
-nonce_t *nonces_get_last(const linkedlist_t *nonces)
+nonce_t *nonces_get_newest(const linkedlist_t *nonces)
 {
 	linkedlist_node_t *node;
 	if ((node = linkedlist_get_last(nonces))) {
+		return node->data;
+	}
+	return NULL;
+}
+
+/**
+ * Get the oldest nonce (the nonce with the lowest value) from a list of nonces.
+ *
+ * @param	nonces		Use these nonces.
+ *
+ * @return	nonce_t		The first nonce.
+ * @return	NULL		The nonces are empty.
+ */
+nonce_t *nonces_get_oldest(const linkedlist_t *nonces)
+{
+	linkedlist_node_t *node;
+	if ((node = linkedlist_get_first(nonces))) {
 		return node->data;
 	}
 	return NULL;

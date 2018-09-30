@@ -71,7 +71,7 @@ neighbour_t *add_new_neighbour(linkedlist_t		*neighbours,
 	new_neighbour->host = NULL;
 	/* create our pseudonym */
 	generate_keypair(&new_neighbour->my_pseudonym.keypair);
-	new_neighbour->my_pseudonym.nonce_value = get_random_uint64_t();
+	new_neighbour->my_pseudonym.nonce_value = get_random_uint64_t() >> 1;
 	/* initialize neighbour's pseudonym */
 	memset(new_neighbour->pseudonym.identifier,
 	       0x0,

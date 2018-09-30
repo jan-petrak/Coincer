@@ -76,8 +76,8 @@ int nonce_is_stale(const nonce_t *nonce, const time_t current_time);
 int nonce_store(linkedlist_t *nonces, uint64_t value);
 
 nonce_t *nonces_find(const linkedlist_t *nonces, uint64_t value);
-nonce_t *nonces_get_first(const linkedlist_t *nonces);
-nonce_t *nonces_get_last(const linkedlist_t *nonces);
+nonce_t *nonces_get_newest(const linkedlist_t *nonces);
+nonce_t *nonces_get_oldest(const linkedlist_t *nonces);
 void nonces_remove_stale(linkedlist_t *nonces);
 
 void peer_clear(peer_t *peer);

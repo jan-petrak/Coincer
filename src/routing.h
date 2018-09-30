@@ -32,7 +32,7 @@
 /** After this many seconds we consider a message trace to be stale. */
 #define MESSAGE_TRACE_STALE_TIME 60
 /** After this many seconds we consider a route to be stale. */
-#define ROUTE_STALE_TIME	 60
+#define ROUTE_STALE_TIME	 180
 
 /** A message trace representation. */
 typedef struct s_message_trace {
