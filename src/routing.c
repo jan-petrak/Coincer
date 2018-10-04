@@ -51,8 +51,12 @@ static int message_send_to_neighbour(const message_t	*message,
 
 static int message_trace_store(linkedlist_t		*msg_traces,
 			       const neighbour_t	*sender,
-			       uint64_t			nonce_value);
+			       uint64_t			nonce_value,
+			       const unsigned char	*from);
 
+static void string_broadcast(const char		*string,
+			     const linkedlist_t	*neighbours,
+			     const neighbour_t	*exception);
 static void string_send_to_neighbour(const char		*string,
 				     neighbour_t	*dest);
 
@@ -200,6 +204,7 @@ static int message_finalize(message_t			*message,
  * Forward someone's message on its way to destination.
  *
  * @param	message		Forward this message.
+ * @param	json_message	The message to be forwarded, just encoded.
  * @param	sender		Neighbour who's sent us the message.
  * @param	global_state	The global state.
  *
@@ -207,26 +212,35 @@ static int message_finalize(message_t			*message,
  * @return	1		Failure.
  */
 int message_forward(const message_t	*message,
+		    const char		*json_message,
 		    const neighbour_t	*sender,
 		    global_state_t	*global_state)
 {
-	const message_body_t *msg_body;
+	neighbour_t	*next_hop;
+	route_t		*route;
 
-	msg_body = &message->body;
-
-	/* if all 'to' bytes are set to 0x0, the message is a broadcast */
-	if (identifier_empty(msg_body->to)) {
+	/* if the 'to' bytes are set to 0x0, the message is a broadcast */
+	if (identifier_empty(message->body.to)) {
 		/* don't send the message to the one who's sent it to us */
-		return message_broadcast_p2p(message,
-					     &global_state->neighbours,
-					     sender);
+		string_broadcast(json_message,
+				 &global_state->neighbours,
+				 sender);
+		return 0;
+	}
+
+	route = route_find(&global_state->routing_table, message->body.to);
+	next_hop = route ? route_next_hop_get(route) : NULL;
+	if (!next_hop) {
+		return 1;
 	}
 
 	message_trace_store(&global_state->message_traces,
 			    sender,
-			    msg_body->nonce);
+			    message->body.nonce,
+			    message->from);
 
-	return message_send_p2p(message, &global_state->routing_table);
+	string_send_to_neighbour(json_message, next_hop);
+	return 0;
 }
 
 /**
@@ -264,22 +278,17 @@ static int message_send_n2n(message_t *message, neighbour_t *dest)
 static int message_send_p2p(const message_t	*message,
 			    const linkedlist_t	*routing_table)
 {
-	neighbour_t		*next_hop;
-	linkedlist_node_t	*next_hop_node;
-	route_t			*route;
+	neighbour_t	*next_hop;
+	route_t		*route;
 
 	route = route_find(routing_table, message->body.to);
-	/* get the next hop or NULL if the message destination is unknown
-	 * or if we have no next hop to reach the destination */
-	next_hop_node = route ? linkedlist_get_first(&route->next_hops) : NULL;
-	if (next_hop_node) {
-		next_hop = (neighbour_t *) next_hop_node->data;
-
-		/* send the message to the next hop */
-		return message_send_to_neighbour(message, next_hop);
+	next_hop = route ? route_next_hop_get(route) : NULL;
+	if (!next_hop) {
+		return 1;
 	}
 
-	return 1;
+	/* send the message to the next hop */
+	return message_send_to_neighbour(message, next_hop);
 }
 
 /**
@@ -329,13 +338,15 @@ int message_trace_is_stale(const message_trace_t *msg_trace,
  * @param	msg_traces	Store to this container.
  * @param	sender		The neighbour whose message we've forwarded.
  * @param	nonce_value	The forwarded message's nonce value.
+ * @param	from		The originator's identifier.
  *
  * @return	0		Successfully stored.
  * @return	1		Failure.
  */
 static int message_trace_store(linkedlist_t		*msg_traces,
 			       const neighbour_t	*sender,
-			       uint64_t			nonce_value)
+			       uint64_t			nonce_value,
+			       const unsigned char	*from)
 {
 	message_trace_t	*msg_trace;
 
@@ -348,6 +359,7 @@ static int message_trace_store(linkedlist_t		*msg_traces,
 	msg_trace->sender = sender;
 	msg_trace->nonce_value = nonce_value;
 	msg_trace->creation = time(NULL);
+	memcpy(msg_trace->from, from, crypto_box_PUBLICKEYBYTES);
 
 	if (!linkedlist_append(msg_traces, msg_trace)) {
 		log_error("Storing a message trace");
@@ -381,12 +393,18 @@ route_t *route_add(linkedlist_t		*routing_table,
 	}
 
 	linkedlist_init(&new_route->next_hops);
-	if (!(new_route->node =
-	      linkedlist_append(&new_route->next_hops, next_hop))) {
+	if (!linkedlist_append(&new_route->next_hops, next_hop)) {
+		free(new_route);
+		log_error("Adding a new route's next hop");
+		return NULL;
+	}
+	if (!(new_route->node = linkedlist_append(routing_table, new_route))) {
+		linkedlist_remove_all(&new_route->next_hops);
 		free(new_route);
 		log_error("Storing a new route");
 		return NULL;
 	}
+
 	new_route->destination = dest;
 	new_route->last_update = time(NULL);
 
@@ -485,6 +503,26 @@ int route_next_hop_add(route_t *route, neighbour_t *next_hop)
 }
 
 /**
+ * Get a next hop for a given route.
+ *
+ * @param	route		The route.
+ *
+ * @return	neighbour_t	The next hop.
+ * @return	NULL		The route has no next hops.
+ */
+neighbour_t *route_next_hop_get(const route_t *route)
+{
+	linkedlist_node_t *next_hop_node;
+
+	next_hop_node = route ? linkedlist_get_first(&route->next_hops) : NULL;
+	if (!next_hop_node) {
+		return NULL;
+	}
+
+	return next_hop_node->data;
+}
+
+/**
  * Remove a next hop from a route, if exists.
  *
  * @param	route		Remove the next hop from this route.
@@ -521,13 +559,15 @@ int route_reset(route_t *route, neighbour_t *next_hop)
  * @param	msg_traces	Recent message traces.
  * @param	neighbour	The forwarder of a new message.
  * @param	nonce_value	The message's nonce value.
+ * @param	from		The identifier of the message originator.
  *
  * @return	1		A routing loop detected.
  * @return	0		No routing loop detected.
  */
 int routing_loop_detect(const linkedlist_t	*msg_traces,
 			const neighbour_t	*neighbour,
-			uint64_t		nonce_value)
+			uint64_t		nonce_value,
+			const unsigned char	*from)
 {
 	const message_trace_t	*msg_trace;
 	const linkedlist_node_t	*node;
@@ -538,7 +578,8 @@ int routing_loop_detect(const linkedlist_t	*msg_traces,
 
 		/* the same message but different neighbour => routing loop */
 		if (msg_trace->nonce_value == nonce_value &&
-		    msg_trace->sender != neighbour) {
+		    msg_trace->sender != neighbour &&
+		    !memcmp(msg_trace->from, from, crypto_box_PUBLICKEYBYTES)) {
 			return 1;
 		}
 
@@ -565,20 +606,18 @@ void routing_loop_remove(linkedlist_t		*routing_table,
 {
 	identity_t		*identity;
 	neighbour_t		*next_hop;
-	linkedlist_node_t	*next_hop_node;
 	route_t			*route;
 
 	route = route_find(routing_table, dest_id);
 
 	/* get the next hop or NULL if the message destination is unknown
 	 * or if we have no next hop to reach the destination */
-	next_hop_node = route ? linkedlist_get_first(&route->next_hops) : NULL;
-	if (next_hop_node) {
-		next_hop = (neighbour_t *) next_hop_node->data;
+	next_hop = route ? route_next_hop_get(route) : NULL;
+	if (next_hop) {
 		route_next_hop_remove(route, next_hop);
 
-		next_hop_node = linkedlist_get_first(&route->next_hops);
-		if (!next_hop_node) {
+		next_hop = route_next_hop_get(route);
+		if (!next_hop) {
 			/* create a temporary identity for the p2p.route.sol */
 			identity = identity_generate(IDENTITY_TMP);
 			/* if appending succeeded */
@@ -831,6 +870,32 @@ int send_p2p_route_sol(linkedlist_t	   *neighbours,
 
 	message_delete(&p2p_route_sol_msg);
 	return ret;
+}
+
+/**
+ * Broadcast a text (json message) to our neighbour.
+ *
+ * @param	string		Send this text.
+ * @param	neighbours	Our neighbours.
+ * @param	exception	Don't send the message to this neighbour.
+ *				This is typically the neighbour from whom
+ *				we've received the message.
+ */
+static void string_broadcast(const char		*string,
+			     const linkedlist_t	*neighbours,
+			     const neighbour_t	*exception)
+{
+	linkedlist_node_t *node;
+	neighbour_t	  *neighbour;
+
+	node = linkedlist_get_first(neighbours);
+	while (node) {
+		neighbour = (neighbour_t *) node->data;
+		if (neighbour != exception) {
+			string_send_to_neighbour(string, neighbour);
+		}
+		node = linkedlist_get_next(neighbours, node);
+	}
 }
 
 /**

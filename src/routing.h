@@ -38,6 +38,8 @@
 typedef struct s_message_trace {
 	/** Message's nonce value. */
 	uint64_t nonce_value;
+	/** Identifier of the sender. */
+	char from[crypto_box_PUBLICKEYBYTES];
 	/** Neighbour who's sent us the message */
 	const neighbour_t *sender;
 	/** Creation timestamp. */
@@ -59,6 +61,7 @@ typedef struct s_route {
 } route_t;
 
 int message_forward(const message_t	*message,
+		    const char		*json_message,
 		    const neighbour_t	*sender,
 		    global_state_t	*global_state);
 
@@ -74,12 +77,14 @@ route_t *route_find(const linkedlist_t	*routing_table,
 		    const unsigned char	*dest_id);
 int route_is_stale(const route_t *route, const time_t *current_time);
 int route_next_hop_add(route_t *route, neighbour_t *next_hop);
+neighbour_t *route_next_hop_get(const route_t *route);
 void route_next_hop_remove(route_t *route, neighbour_t *next_hop);
 int route_reset(route_t *route, neighbour_t *next_hop);
 
 int routing_loop_detect(const linkedlist_t	*msg_traces,
 			const neighbour_t	*neighbour,
-			uint64_t		nonce_value);
+			uint64_t		nonce_value,
+			const unsigned char	*from);
 void routing_loop_remove(linkedlist_t		*routing_table,
 			 linkedlist_t		*neighbours,
 			 linkedlist_t		*identities,

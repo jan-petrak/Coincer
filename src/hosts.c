@@ -161,6 +161,7 @@ int hosts_to_str(const linkedlist_t *hosts, char **output)
 	const char		*separator = ", ";
 	size_t			separator_len;
 	char			text_ip[INET6_ADDRSTRLEN];
+	char			*tmp_out;
 
 	opening_len   = strlen(opening);
 	separator_len = strlen(separator);
@@ -191,12 +192,14 @@ int hosts_to_str(const linkedlist_t *hosts, char **output)
 		if (output_buff_size - output_size < 128) {
 			output_buff_size *= 2;
 
-			*output = (char *) realloc(*output, output_buff_size *
+			tmp_out = (char *) realloc(*output, output_buff_size *
 							    sizeof(char));
-			if (!*output) {
+			if (!tmp_out) {
 				log_error("Reallocating string of hosts");
+				free(output);
 				return 1;
 			}
+			*output = tmp_out;
 		}
 
 		/* binary ip to text ip conversion */

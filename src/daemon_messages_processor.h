@@ -32,9 +32,9 @@ enum process_message_result {
 	PMR_ERR_VERSION
 };
 
-enum process_message_result process_encoded_message(
-						const char	*json_message,
-						neighbour_t	*sender,
-						global_state_t	*global_state);
+enum process_message_result
+	process_encoded_message(const char	*json_message,
+				neighbour_t	*sender,
+				global_state_t	*global_state);
 
 #endif /* DAEMON_MESSAGES_PROCESSOR_H */

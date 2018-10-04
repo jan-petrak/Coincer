@@ -36,12 +36,14 @@
  *  presence of one identity. */
 #define ADV_GAP_TIME	10
 
-static enum process_message_result process_message(
-						const message_t	*message,
-						neighbour_t	*sender,
-						global_state_t	*global_state);
+static enum process_message_result
+	process_message(const message_t	*message,
+			const char	*json_message,
+			neighbour_t	*sender,
+			global_state_t	*global_state);
 
 static int process_p2p_bye(const message_t	*message,
+			   const char		*json_message,
 			   neighbour_t		*sender,
 			   peer_t		*sender_peer,
 			   global_state_t	*global_state);
@@ -57,10 +59,12 @@ static int process_p2p_peers_sol(neighbour_t	    *sender,
 static int process_p2p_ping(neighbour_t *sender);
 static int process_p2p_pong(neighbour_t *sender);
 static int process_p2p_route_adv(const message_t *message,
+				 const char	 *json_message,
 				 neighbour_t	 *sender,
 				 peer_t		 *sender_peer,
 				 global_state_t	 *global_state);
 static int process_p2p_route_sol(const message_t *message,
+				 const char	 *json_message,
 				 neighbour_t	 *sender,
 				 global_state_t	 *global_state);
 
@@ -80,36 +84,32 @@ static int process_p2p_route_sol(const message_t *message,
  * @return	PMR_ERR_VERSION		The message is of different
  *					protocol version.
  */
-enum process_message_result process_encoded_message(
-						const char	*json_message,
-						neighbour_t	*sender,
-						global_state_t	*global_state)
+enum process_message_result
+	process_encoded_message(const char	*json_message,
+				neighbour_t	*sender,
+				global_state_t	*global_state)
 {
 	char				*json_message_body;
 	message_t			message;
 	enum process_message_result	ret;
 
 	/* decode JSON message; if parsing JSON message into message_t failed */
-	if (decode_message(json_message, &message)) {
+	if (decode_message(json_message, &message, &json_message_body)) {
 		log_debug("process_encoded_message - decoding a received "
-			  "message has failed");
+			  "message has failed. The message:\n%s", json_message);
 		return PMR_ERR_PARSING;
 	}
 
 	if (message.version != PROTOCOL_VERSION) {
+		free(json_message_body);
 		message_delete(&message);
 		return PMR_ERR_VERSION;
 	}
 
-	/* integrity verification part; get message body in JSON format */
-	if (encode_message_body(&message.body, &json_message_body)) {
-		log_error("Encoding what we've just decoded has failed");
-		message_delete(&message);
-		return PMR_ERR_INTERNAL;
-	}
-	/* if the message integrity is violated */
+	/* integrity verification part; if the message integrity is violated */
 	if (verify_signature(json_message_body, message.from, message.sig)) {
 		log_warn("Someone tampered with a received message");
+		log_debug("The tampered message:\n%s", json_message);
 		free(json_message_body);
 		message_delete(&message);
 		return PMR_ERR_INTEGRITY;
@@ -118,7 +118,7 @@ enum process_message_result process_encoded_message(
 	free(json_message_body);
 
 	/* process the message */
-	ret = process_message(&message, sender, global_state);
+	ret = process_message(&message, json_message, sender, global_state);
 
 	message_delete(&message);
 	return ret;
@@ -128,6 +128,7 @@ enum process_message_result process_encoded_message(
  * Process a message received from its forwarder/sender (our neighbour).
  *
  * @param	message			The received message.
+ * @param	json_message		The received message in the JSON format.
  * @param	sender			The message sender/forwarder.
  * @param	global_state		The global state.
  *
@@ -136,10 +137,11 @@ enum process_message_result process_encoded_message(
  * @return	PMR_ERR_INTERNAL	Internal processing error.
  * @return	PMR_ERR_SEMANTIC	Semantic error.
  */
-static enum process_message_result process_message(
-						const message_t	*message,
-						neighbour_t	*sender,
-						global_state_t	*global_state)
+static enum process_message_result
+	process_message(const message_t	*message,
+			const char	*json_message,
+			neighbour_t	*sender,
+			global_state_t	*global_state)
 {
 	int			cmp_val;
 	linkedlist_t		*hosts;
@@ -269,7 +271,8 @@ static enum process_message_result process_message(
 				/* check if there's a routing loop */
 				if (routing_loop_detect(msg_traces,
 							sender,
-							nonce_value)) {
+							nonce_value,
+							message->from)) {
 					routing_loop_remove(routing_table,
 							    neighbours,
 							    identities,
@@ -291,7 +294,10 @@ static enum process_message_result process_message(
 	 * not meant for us */
 	if (!identity) {
 		/* if forwarding succeeded */
-		if (!message_forward(message, sender, global_state)) {
+		if (!message_forward(message,
+				     json_message,
+				     sender,
+				     global_state)) {
 			/* store message's nonce */
 			nonce_store(&sender_peer->nonces, nonce_value);
 		}
@@ -306,6 +312,7 @@ static enum process_message_result process_message(
 	switch (msg_type) {
 		case P2P_BYE:
 			res = process_p2p_bye(message,
+					      json_message,
 					      sender,
 					      sender_peer,
 					      global_state);
@@ -345,12 +352,14 @@ static enum process_message_result process_message(
 			break;
 		case P2P_ROUTE_ADV:
 			res = process_p2p_route_adv(message,
+						    json_message,
 						    sender,
 						    sender_peer,
 						    global_state);
 			break;
 		case P2P_ROUTE_SOL:
 			res = process_p2p_route_sol(message,
+						    json_message,
 						    sender,
 						    global_state);
 			break;
@@ -380,6 +389,7 @@ static enum process_message_result process_message(
  * Process p2p.bye.
  *
  * @param	message		Process this message.
+ * @param	json_message	The received message in the JSON format.
  * @param	sender		We've received the message from this neighbour.
  * @param	sender_peer	Sender's peer representation.
  * @param	global_state	The global state.
@@ -387,6 +397,7 @@ static enum process_message_result process_message(
  * @return	0		Successfully processed.
  */
 static int process_p2p_bye(const message_t	*message,
+			   const char		*json_message,
 			   neighbour_t		*sender,
 			   peer_t		*sender_peer,
 			   global_state_t	*global_state)
@@ -394,7 +405,7 @@ static int process_p2p_bye(const message_t	*message,
 	route_delete(&global_state->routing_table, message->from);
 	peer_delete(sender_peer);
 
-	message_forward(message, sender, global_state);
+	message_forward(message, json_message, sender, global_state);
 
 	return 0;
 }
@@ -588,6 +599,7 @@ static int process_p2p_pong(neighbour_t *sender)
  * Process p2p.route.adv.
  *
  * @param	message		Process this message.
+ * @param	json_message	The received message in the JSON format.
  * @param	sender		We've received the message from this neighbour.
  * @param	sender_peer	Sender's peer representation.
  * @param	global_state	The global state.
@@ -596,6 +608,7 @@ static int process_p2p_pong(neighbour_t *sender)
  * @return	1		Failure.
  */
 static int process_p2p_route_adv(const message_t *message,
+				 const char	 *json_message,
 				 neighbour_t	 *sender,
 				 peer_t		 *sender_peer,
 				 global_state_t	 *global_state)
@@ -627,7 +640,7 @@ static int process_p2p_route_adv(const message_t *message,
 		return 1;
 	}
 
-	message_forward(message, sender, global_state);
+	message_forward(message, json_message, sender, global_state);
 	return 0;
 }
 
@@ -635,6 +648,7 @@ static int process_p2p_route_adv(const message_t *message,
  * Process p2p.route.sol.
  *
  * @param	message		Process this message.
+ * @param	json_message	The received message in the JSON format.
  * @param	sender		We've received the message from this neighbour.
  * @param	global_state	The global state.
  *
@@ -642,6 +656,7 @@ static int process_p2p_route_adv(const message_t *message,
  * @return	1		Failure.
  */
 static int process_p2p_route_sol(const message_t *message,
+				 const char	 *json_message,
 				 neighbour_t	 *sender,
 				 global_state_t	 *global_state)
 {
@@ -654,6 +669,7 @@ static int process_p2p_route_sol(const message_t *message,
 	/* if we wouldn't rebroadcast the p2p.route.sol, and just sent
 	 * a p2p.route.adv, it could be obvious the 'target' is us */
 	if (message_forward(message,
+			    json_message,
 			    sender,
 			    global_state)) {
 		return 1;

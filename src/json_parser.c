@@ -29,13 +29,16 @@
 /**
  * Decode a JSON message (including its JSON body) into daemon message.
  *
- * @param	json_message	Decode this JSON message.
- * @param	message		Store decoded data in here.
+ * @param	json_message		Decode this JSON message.
+ * @param	message			Store decoded data in here.
+ * @param	json_message_body	Store the message's JSON body in here.
  *
- * @return	0		Decoding successful.
- * @return	1		Failure.
+ * @return	0			Decoding successful.
+ * @return	1			Failure.
  */
-int decode_message(const char *json_message, message_t *message)
+int decode_message(const char	*json_message,
+		   message_t	*message,
+		   char		**json_message_body)
 {
 	char from_hex[65];
 	char to_hex[65];
