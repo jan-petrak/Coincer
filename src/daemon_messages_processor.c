@@ -37,8 +37,9 @@
 #define ADV_GAP_TIME	10
 
 static enum process_message_result
-	process_message(const message_t	*message,
+	process_message(message_t	*message,
 			const char	*json_message,
+			const char	*json_data,
 			neighbour_t	*sender,
 			global_state_t	*global_state);
 
@@ -91,6 +92,7 @@ enum process_message_result
 {
 	char				*json_message_body;
 	message_t			message;
+	char				*json_data;
 	enum process_message_result	ret;
 
 	/* decode JSON message; if parsing JSON message into message_t failed */
@@ -102,7 +104,6 @@ enum process_message_result
 
 	if (message.version != PROTOCOL_VERSION) {
 		free(json_message_body);
-		message_delete(&message);
 		return PMR_ERR_VERSION;
 	}
 
@@ -111,15 +112,29 @@ enum process_message_result
 		log_warn("Someone tampered with a received message");
 		log_debug("The tampered message:\n%s", json_message);
 		free(json_message_body);
-		message_delete(&message);
 		return PMR_ERR_INTEGRITY;
 	}
-	/* integrity verification done */
+	/* message body intact; decode it */
+	if (decode_message_body(json_message_body,
+				&message.body,
+				&json_data)) {
+		log_debug("process_encoded_message - decoding message body has "
+			  "failed. The message body:\n%s", json_message_body);
+		free(json_message_body);
+		return PMR_ERR_PARSING;
+	}
 	free(json_message_body);
 
 	/* process the message */
-	ret = process_message(&message, json_message, sender, global_state);
+	ret = process_message(&message,
+			      json_message,
+			      json_data,
+			      sender,
+			      global_state);
 
+	if (json_data != NULL) {
+		free(json_data);
+	}
 	message_delete(&message);
 	return ret;
 }
@@ -128,18 +143,21 @@ enum process_message_result
  * Process a message received from its forwarder/sender (our neighbour).
  *
  * @param	message			The received message.
- * @param	json_message		The received message in the JSON format.
+ * @param	json_message		The received message in JSON format.
+ * @param	json_data		The received message's JSON data.
  * @param	sender			The message sender/forwarder.
  * @param	global_state		The global state.
  *
  * @return	PMR_DONE		The received message was successfully
  *					processed.
  * @return	PMR_ERR_INTERNAL	Internal processing error.
+ * @return	PMR_ERR_PARSING		Parsing failure.
  * @return	PMR_ERR_SEMANTIC	Semantic error.
  */
 static enum process_message_result
-	process_message(const message_t	*message,
+	process_message(message_t	*message,
 			const char	*json_message,
+			const char	*json_data,
 			neighbour_t	*sender,
 			global_state_t	*global_state)
 {
@@ -147,7 +165,7 @@ static enum process_message_result
 	linkedlist_t		*hosts;
 	linkedlist_t		*identities;
 	identity_t		*identity;
-	const message_body_t	*msg_body;
+	message_body_t		*msg_body;
 	const linkedlist_t	*msg_traces;
 	enum message_type	msg_type;
 	linkedlist_t		*neighbours;
@@ -177,6 +195,13 @@ static enum process_message_result
 				  "before p2p.hello");
 			return PMR_ERR_SEMANTIC;
 		}
+
+		if (decode_message_data(json_data, msg_type, &msg_body->data)) {
+			log_debug("process_message - decoding message data "
+				  "has failed. The data:\n%s", json_data);
+			return PMR_ERR_PARSING;
+		}
+
 		res = process_p2p_hello(message,
 					sender,
 					neighbours,
@@ -309,6 +334,12 @@ static enum process_message_result
 
 	/* the message is meant for us; process it */
 
+	if (decode_message_data(json_data, msg_type, &msg_body->data)) {
+		log_debug("process_encoded_message - decoding message data "
+			  "has failed. The data:\n%s", json_data);
+		return PMR_ERR_PARSING;
+	}
+
 	switch (msg_type) {
 		case P2P_BYE:
 			res = process_p2p_bye(message,
@@ -431,7 +462,7 @@ static int process_p2p_hello(const message_t	*message,
 
 	/* don't take hello from already active neighbour */
 	if (sender->flags & NEIGHBOUR_ACTIVE) {
-		return 1;
+		return 0;
 	}
 
 	/* check self-neighbouring; if we have a neighbour with 'my_pseudonym'
@@ -445,7 +476,7 @@ static int process_p2p_hello(const message_t	*message,
 				compare_neighbour_my_pseudonyms))) {
 		linkedlist_delete_safely(neighbour->node, clear_neighbour);
 		linkedlist_delete_safely(sender->node, clear_neighbour);
-		return 1;
+		return 0;
 	}
 
 	hello = (p2p_hello_t *) message->body.data;
@@ -480,7 +511,6 @@ static int process_p2p_hello(const message_t	*message,
  * @param	hosts		Our known hosts.
  *
  * @return	0		Successfully processed.
- * @return	1		Failure.
  */
 static int process_p2p_peers_adv(const message_t *message,
 				 neighbour_t	 *sender,
@@ -501,7 +531,7 @@ static int process_p2p_peers_adv(const message_t *message,
 	/* if we haven't asked this neighbour for addresses */
 	if (!(sender->flags & NEIGHBOUR_ADDRS_REQ)) {
 		log_debug("process_p2p_peers_adv - unwanted addrs arrived");
-		return 1;
+		return 0;
 	}
 	unset_neighbour_flags(sender, NEIGHBOUR_ADDRS_REQ);
 
@@ -511,7 +541,7 @@ static int process_p2p_peers_adv(const message_t *message,
 	 * which is 4 chars) */
 	if (strlen(peers_adv->addresses) < 4) {
 		log_debug("process_p2p_peers_adv - wrong addrs format");
-		return 1;
+		return 0;
 	}
 
 	/* set initial pointer position; skip the outer list '[' */
@@ -528,7 +558,7 @@ static int process_p2p_peers_adv(const message_t *message,
 		/* the tuple can not have more than 54 chars (plus '\0') */
 		if (n > 54) {
 			log_debug("process_p2p_peers_adv - wrong addrs format");
-			return 1;
+			return 0;
 		}
 
 		/* copy the chars between '[' and ']', both boundary
@@ -539,7 +569,7 @@ static int process_p2p_peers_adv(const message_t *message,
 		/* get string addr and numerical port from the tuple */
 		if (sscanf(tuple, " %[^,], %hu ", addr_str, &port) != 2) {
 			log_debug("process_p2p_peers_adv - wrong addrs format");
-			return 1;
+			return 0;
 		}
 
 		/* if conversion of addr_str into addr succeeded */

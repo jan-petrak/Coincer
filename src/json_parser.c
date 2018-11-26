@@ -27,18 +27,18 @@
 
 /* TODO: Implement */
 /**
- * Decode a JSON message (including its JSON body) into daemon message.
+ * Decode a JSON message into a daemon message.
  *
  * @param	json_message		Decode this JSON message.
  * @param	message			Store decoded data in here.
- * @param	json_message_body	Store the message's JSON body in here.
+ * @param	json_body		Store the message's JSON body in here.
  *
  * @return	0			Decoding successful.
  * @return	1			Failure.
  */
 int decode_message(const char	*json_message,
 		   message_t	*message,
-		   char		**json_message_body)
+		   char		**json_body)
 {
 	char from_hex[65];
 	char to_hex[65];
@@ -94,14 +94,89 @@ int decode_message(const char	*json_message,
  * Decode a JSON format message body into a daemon message body.
  *
  * @param	json_body	Decode this JSON message body.
- * @param	message		Store decoded body in here.
+ * @param	body		Store decoded body in here.
+ * @param	json_data	Store the message's JSON data in here, if any.
+ *				Otherwise set to NULL.
  *
  * @return	0		Decoding successful.
  * @return	1		Failure.
  */
-int decode_message_body(const char *json_body, message_body_t *body)
+int decode_message_body(const char	*json_body,
+			message_body_t	*body,
+			char		**json_data)
 {
+	*json_data = NULL;
 	return 0;
+}
+
+/* TODO: Implement */
+/**
+ * Decode a JSON format message data into an appropriate structure.
+ *
+ * @param	json_data	Decode this JSON data. This can be NULL
+ *				depending on message type.
+ * @param	type		Type of the message data.
+ * @param	data		Dynamically allocated structure storing the
+ *				message data. NULL if the message has no data.
+ *
+ * @return	0		Decoding successful.
+ * @return	1		Failure.
+ */
+int decode_message_data(const char		*json_data,
+			const enum message_type	type,
+			void			**data)
+{
+	*data = NULL;
+
+	switch (type) {
+		case P2P_BYE:
+			return 0;
+		case P2P_HELLO:
+			if (json_data == NULL) {
+				return 1;
+			}
+			*data = (p2p_hello_t *) malloc(sizeof(p2p_hello_t));
+			if (!*data) {
+				log_error("Allocating p2p.hello");
+				return 1;
+			}
+			return 0;
+		case P2P_PEERS_ADV:
+			if (json_data == NULL) {
+				return 1;
+			}
+			*data = (p2p_peers_adv_t *) malloc(
+						sizeof(p2p_peers_adv_t));
+			if (!*data) {
+				log_error("Allocating p2p.peers.adv");
+				return 1;
+			}
+			return 0;
+		case P2P_PEERS_SOL:
+			return 0;
+		case P2P_PING:
+			return 0;
+		case P2P_PONG:
+			return 0;
+		case P2P_ROUTE_ADV:
+			return 0;
+		case P2P_ROUTE_SOL:
+			if (json_data == NULL) {
+				return 1;
+			}
+			*data = (p2p_route_sol_t *) malloc(
+						sizeof(p2p_route_sol_t));
+			if (!*data) {
+				log_error("Allocating p2p.route.sol");
+				return 1;
+			}
+			return 0;
+		default:
+			log_error("Unknown message type parsing");
+			return 1;
+	}
+
+	return 1;
 }
 
 /* TODO: Implement */

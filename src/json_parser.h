@@ -27,7 +27,7 @@ static const char *msg_type_str[] = {
 	"p2p.bye",
 	"p2p.hello",
 	"p2p.peers.adv",
-	"p2p.peers.sol"
+	"p2p.peers.sol",
 	"p2p.ping",
 	"p2p.pong",
 	"p2p.route.adv",
@@ -36,8 +36,14 @@ static const char *msg_type_str[] = {
 
 int decode_message(const char	*json_message,
 		   message_t	*message,
-		   char		**json_message_body);
-int decode_message_body(const char *json_body, message_body_t *body);
+		   char		**json_body);
+int decode_message_body(const char	*json_body,
+			message_body_t	*body,
+			char		**json_data);
+int decode_message_data(const char		*json_data,
+			const enum message_type	type,
+			void			**data);
+
 int encode_message(const message_t *message, char **json_message);
 int encode_message_body(const message_body_t *body, char **json_body);
 
