@@ -18,6 +18,7 @@
 
 #include <event2/event.h>
 
+#include "configuration.h"
 #include "global_state.h"
 #include "linkedlist.h"
 #include "log.h"
@@ -51,12 +52,19 @@ void global_state_clear(global_state_t *global_state)
  * Initialize global state variables.
  *
  * @param	global_state	The global state.
+ *
+ * @return	0		Successfully initialized.
+ * @return	1		Failure.
  */
 int global_state_init(global_state_t *global_state)
 {
 	global_state->event_loop = NULL;
 	if (setup_paths(&global_state->filepaths)) {
 		log_error("Initializing paths to needed files/dirs");
+		return 1;
+	}
+	if (create_dirs(&global_state->filepaths)) {
+		log_error("Creating directories");
 		return 1;
 	}
 

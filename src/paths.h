@@ -21,10 +21,8 @@
 
 /** Paths to needed files and directories. */
 typedef struct s_filepaths {
-	/**< Path to config directory. */
-	char *config_dir;
-	/**< Path to data directory. */
-	char *data_dir;
+	char *config_dir; /**< Config directory. */
+	char *data_dir; /**< Data directory. */
 
 	/**< Path to file with addresses of hosts. */
 	char *hosts;

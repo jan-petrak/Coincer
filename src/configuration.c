@@ -21,152 +21,38 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
-#include "autoconfig.h"
 #include "configuration.h"
 #include "log.h"
+#include "paths.h"
 
 /**
- * Set home directory.
+ * Create a directory, if doesn't exist yet.
  *
- * @param	homedir		Path to homedir.
+ * @param	dir_path	Path to the directory.
+ * @param	mode		Directory's permissions.
  *
- * @return	0		Path successfully set.
- * @return	1		Home directory retrieval failure.
+ * @return	0		Success.
+ * @return	1		Failure.
  */
-static int set_homedir(char **homedir)
-{
-	*homedir = getenv("HOME");
-	if (!*homedir || *homedir[0] == '\0') {
-		log_error("Can not find home directory");
-		return 1;
-	}
-	return 0;
-}
-
-/**
- * Set paths to config and data directories.
- *
- * @param	config_dir	Config directory.
- * @param	data_dir	Data directory.
- *
- * @return	0		Paths successfully set.
- * @return	1		Allocation failure.
- */
-static int set_directories(char **config_dir, char **data_dir)
-{
-	char *homedir = NULL,
-	     *tmpchar = NULL;
-	size_t tmpsize;
-
-	/* configuration directory */
-	tmpchar = getenv("XDG_CONFIG_HOME");
-	if (!tmpchar || tmpchar[0] == '\0') {
-		if (set_homedir(&homedir)) {
-			return 1;
-		}
-		tmpsize = strlen(homedir);
-		*config_dir = (char *) malloc(tmpsize +
-					     sizeof("/.config/" PACKAGE_NAME
-						    "/"));
-		if (!*config_dir) {
-			log_error("Setting configdir");
-			return 1;
-		}
-		strcpy(*config_dir, homedir);
-		strcpy(*config_dir + tmpsize, "/.config/" PACKAGE_NAME "/");
-	} else {
-		tmpsize = strlen(tmpchar);
-		*config_dir = (char *) malloc(tmpsize +
-					     sizeof("/" PACKAGE_NAME "/"));
-		if (!*config_dir) {
-			log_error("Setting configdir");
-			return 1;
-		}
-		strcpy(*config_dir, tmpchar);
-		strcpy(*config_dir + tmpsize, "/" PACKAGE_NAME "/");
-	}
-
-	/* data directory */
-	tmpchar = getenv("XDG_DATA_HOME");
-	if (!tmpchar || tmpchar[0] == '\0') {
-		if (!homedir && set_homedir(&homedir)) {
-			free(config_dir);
-			return 1;
-		}
-		tmpsize = strlen(homedir);
-		*data_dir = (char *) malloc(tmpsize +
-					   sizeof("/.local/share/" PACKAGE_NAME
-						  "/"));
-		if (!*data_dir) {
-			log_error("Setting datadir");
-			free(config_dir);
-			return 1;
-		}
-		strcpy(*data_dir, homedir);
-		strcpy(*data_dir + tmpsize, "/.local/share/" PACKAGE_NAME "/");
-	} else {
-		tmpsize = strlen(tmpchar);
-		*data_dir = (char *) malloc(tmpsize +
-					   sizeof("/" PACKAGE_NAME "/"));
-		if (!*data_dir) {
-			log_error("Setting datadir");
-			free(config_dir);
-			return 1;
-		}
-		strcpy(*data_dir, tmpchar);
-		strcpy(*data_dir + tmpsize, "/" PACKAGE_NAME "/");
-	}
-
-	return 0;
-}
-
-/**
- * Creates directories if they don't exist yet.
- *
- * @param	config_dir	Config directory.
- * @param	data_dir	Data directory.
- *
- * @return	0		Directories created.
- * @return	1		Creating directories failed.
- */
-static int create_dirs(const char *config_dir, const char *data_dir)
+static int create_dir(const char *dir_path, mode_t mode)
 {
 	struct stat buffer;
 
-	/* configuration directory */
-	if (stat(config_dir, &buffer)) {
+	if (stat(dir_path, &buffer)) {
 		if (errno == ENOENT) {
 			/* create */
-			if (mkdir(config_dir, S_IRWXU)) {
-				log_error("Could not create configuration "
-					  "directory %s", config_dir);
+			if (mkdir(dir_path, mode)) {
+				log_error("Could not create directory %s",
+					  dir_path);
 				return 1;
 			} else {
-				log_debug("create_dirs - created configuration "
-					  "directory %s", config_dir);
+				log_debug("create_dir - directory %s created",
+					  dir_path);
 			}
 		} else {
-			log_error("Could not open configuration "
-				  "directory %s", config_dir);
-			return 1;
-		}
-	}
-
-	/* data directory */
-	if (stat(data_dir, &buffer)) {
-		if (errno == ENOENT) {
-			/* create */
-			if (mkdir(data_dir, S_IRWXU)) {
-				log_error("Could not create "
-					  "data directory %s", data_dir);
-				return 1;
-			} else {
-				log_debug("create_dirs - created data "
-					  "directory %s", data_dir);
-			}
-		} else {
-			log_error("Could not open data directory %s", data_dir);
+			log_error("Could not open directory %s", dir_path);
 			return 1;
 		}
 	}
@@ -175,18 +61,18 @@ static int create_dirs(const char *config_dir, const char *data_dir)
 }
 
 /**
- * Create needed directories and fetch their paths into params.
+ * Create needed directories.
  *
- * @param	config_dir	Config directory.
- * @param	data_dir	Data directory.
+ * @param	paths	Create directories for dir paths in here.
  *
- * @return	0		Directories created.
- * @return	1		Directories setup failure.
+ * @return	0	Directories created.
+ * @return	1	Failure.
  */
-int setup_directories(char **config_dir, char **data_dir)
+int create_dirs(const filepaths_t *paths)
 {
-	if (set_directories(config_dir, data_dir) ||
-	    create_dirs(*config_dir, *data_dir)) {
+	if (create_dir(paths->config_dir, S_IRWXU) ||
+	    create_dir(paths->data_dir, S_IRWXU)) {
+		log_error("Creating directories");
 		return 1;
 	}
 

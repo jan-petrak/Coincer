@@ -19,6 +19,8 @@
 #ifndef CONFIGURATION_H
 #define CONFIGURATION_H
 
-int setup_directories(char **config_dir, char **data_dir);
+#include "paths.h"
+
+int create_dirs(const filepaths_t *paths);
 
 #endif /* CONFIGURATION_H */

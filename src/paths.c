@@ -20,11 +20,85 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "configuration.h"
+#include "autoconfig.h"
 #include "log.h"
 #include "paths.h"
 
 #define HOSTS_FILE_NAME "hosts"
+
+static int set_dir_path(const char *location,
+			const char *dir_name,
+			char	   **dir_path);
+
+/**
+ * Set path to home directory.
+ *
+ * @param	homedir		Path to home directory.
+ *
+ * @return	0		Path successfully set.
+ * @return	1		Home directory retrieval failure.
+ */
+static int set_homedir(char **homedir)
+{
+	*homedir = getenv("HOME");
+	if (!*homedir || *homedir[0] == '\0') {
+		log_error("Can not find home directory");
+		return 1;
+	}
+	return 0;
+}
+
+/**
+ * Set path to config directory.
+ *
+ * @param	config_dir	Path to config directory.
+ *
+ * @return	0		Successfully set.
+ * @return	1		Failure.
+ */
+static int set_config_dir_path(char **config_dir)
+{
+	char *homedir = NULL,
+	     *tmpchar = NULL;
+
+	tmpchar = getenv("XDG_CONFIG_HOME");
+	if (!tmpchar || tmpchar[0] == '\0') {
+		if (set_homedir(&homedir)) {
+			return 1;
+		}
+		return set_dir_path(homedir,
+				    "/.config/" PACKAGE,
+				    config_dir);
+	}
+
+	return set_dir_path(tmpchar, "/" PACKAGE, config_dir);
+}
+
+/**
+ * Set path to data directory.
+ *
+ * @param	data_dir	Path to data directory.
+ *
+ * @return	0		Successfully set.
+ * @return	1		Failure.
+ */
+static int set_data_dir_path(char **data_dir)
+{
+	char *homedir = NULL,
+	     *tmpchar = NULL;
+
+	tmpchar = getenv("XDG_DATA_HOME");
+	if (!tmpchar || tmpchar[0] == '\0') {
+		if (set_homedir(&homedir)) {
+			return 1;
+		}
+		return set_dir_path(homedir,
+				    "/.local/share/" PACKAGE,
+				    data_dir);
+	}
+
+	return set_dir_path(tmpchar, "/" PACKAGE, data_dir);
+}
 
 /**
  * Sets path to hosts file.
@@ -52,6 +126,36 @@ static int set_hosts_path(char *data_dir, char **hosts)
 }
 
 /**
+ * Set path to a directory.
+ *
+ * @param	location	Directory's location.
+ * @param	dir_name	Directory's name.
+ * @param	dir_path	Path to the directory.
+ *
+ * @return	0		Successfully set.
+ * @return	1		Failure.
+ */
+static int set_dir_path(const char *location,
+			const char *dir_name,
+			char	   **dir_path)
+{
+	*dir_path = (char *) malloc((strlen(location) + strlen(dir_name)) *
+				    sizeof(char) + sizeof("/"));
+
+	if (!*dir_path) {
+		log_error("Setting directory path for %s", dir_name);
+		return 1;
+	}
+
+	strcpy(*dir_path, location);
+
+	strcat(*dir_path, dir_name);
+	strcat(*dir_path, "/");
+
+	return 0;
+}
+
+/**
  * Initializes a filepaths_t instance.
  *
  * @param	filepaths	filepaths_t to be initialized.
@@ -61,12 +165,15 @@ static int set_hosts_path(char *data_dir, char **hosts)
  */
 int setup_paths(filepaths_t *filepaths)
 {
-	if (setup_directories(&filepaths->config_dir,
-			      &filepaths->data_dir)) {
+	if (set_config_dir_path(&filepaths->config_dir) ||
+	    set_data_dir_path(&filepaths->data_dir)) {
+		log_error("Setting directory paths failed");
 		return 1;
 	}
 
-	set_hosts_path(filepaths->data_dir, &filepaths->hosts);
+	if (set_hosts_path(filepaths->data_dir, &filepaths->hosts)) {
+		return 1;
+	}
 
 	return 0;
 }
