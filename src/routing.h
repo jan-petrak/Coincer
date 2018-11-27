@@ -39,7 +39,7 @@ typedef struct s_message_trace {
 	/** Message's nonce value. */
 	uint64_t nonce_value;
 	/** Identifier of the sender. */
-	char from[crypto_box_PUBLICKEYBYTES];
+	char from[PUBLIC_KEY_SIZE];
 	/** Neighbour who's sent us the message */
 	const neighbour_t *sender;
 	/** Creation timestamp. */

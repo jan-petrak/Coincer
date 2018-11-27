@@ -43,7 +43,7 @@ typedef struct s_nonce {
 /** Peer representation. */
 typedef struct s_peer {
 	/** Peer's public key. */
-	unsigned char identifier[crypto_box_PUBLICKEYBYTES];
+	unsigned char identifier[PUBLIC_KEY_SIZE];
 	/** A sorted list of nonces tied to this peer. */
 	linkedlist_t nonces;
 	/** The last known 'announcement of presence' nonce of this peer. */
@@ -64,7 +64,7 @@ typedef struct s_identity {
 	uint64_t nonce_value;
 } identity_t;
 
-int identifier_empty(const unsigned char id[crypto_box_PUBLICKEYBYTES]);
+int identifier_empty(const unsigned char id[PUBLIC_KEY_SIZE]);
 
 identity_t *identity_find(const linkedlist_t	*identities,
 			  const unsigned char	*identifier);

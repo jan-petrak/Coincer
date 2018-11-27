@@ -22,27 +22,56 @@
 #include <sodium.h>
 #include <stdint.h>
 
+#define PUBLIC_KEY_SIZE	crypto_box_PUBLICKEYBYTES
+#define SECRET_KEY_SIZE	crypto_box_SECRETKEYBYTES
+#define SIGNATURE_SIZE	crypto_sign_BYTES
+
+/* TODO: replace with macros from wolfssl */
+#define RIPEMD_160_SIZE	20
+#define SHA3_256_SIZE	32
+
 /** A Pair of public and secret key. */
 typedef struct s_keypair {
 	/** Public key. */
-	unsigned char	public_key[crypto_box_PUBLICKEYBYTES];
+	unsigned char	public_key[PUBLIC_KEY_SIZE];
 	/** Secret key. */
-	unsigned char	secret_key[crypto_box_SECRETKEYBYTES];
+	unsigned char	secret_key[SECRET_KEY_SIZE];
 } keypair_t;
+
+enum hash_type {
+	HT_RIPEMD_160,
+	HT_SHA3_256
+};
+
+int decrypt_message(const char		*message,
+		    const unsigned char public_key[PUBLIC_KEY_SIZE],
+		    const unsigned char	secret_key[SECRET_KEY_SIZE],
+		    char		**decrypted);
+int encrypt_message(const char		*message,
+		    const unsigned char public_key[PUBLIC_KEY_SIZE],
+		    char		**encrypted);
+
+void fetch_random_value(void *value, size_t value_size);
 
 void generate_keypair(keypair_t *keypair);
 
 uint32_t get_random_uint32_t(uint32_t upper_bound);
 uint64_t get_random_uint64_t(void);
 
-int hash_message(const char		*string_message,
-		 unsigned char		hash[crypto_generichash_BYTES]);
-void sign_message(const char		*string_message,
-		  const unsigned char	secret_key[crypto_box_SECRETKEYBYTES],
-		  unsigned char		signature[crypto_sign_BYTES]);
+int hash_check(enum hash_type		type,
+	       const unsigned char	*hash,
+	       const unsigned char	*value,
+	       size_t			value_size);
+void hash_message(enum hash_type	type,
+		  const unsigned char	*message,
+		  size_t		message_size,
+		  unsigned char		*hash);
 
+void sign_message(const char		*string_message,
+		  const unsigned char	secret_key[SECRET_KEY_SIZE],
+		  unsigned char		signature[SIGNATURE_SIZE]);
 int verify_signature(const char		*string_message,
-		     const unsigned char public_key[crypto_box_PUBLICKEYBYTES],
-		     const unsigned char signature[crypto_sign_BYTES]);
+		     const unsigned char public_key[PUBLIC_KEY_SIZE],
+		     const unsigned char signature[SIGNATURE_SIZE]);
 
 #endif /* CRYPTO_H */

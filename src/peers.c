@@ -35,11 +35,9 @@
  * @return	1		The identifier is empty.
  * @return	0		The identifier is not empty.
  */
-int identifier_empty(const unsigned char id[crypto_box_PUBLICKEYBYTES])
+int identifier_empty(const unsigned char id[PUBLIC_KEY_SIZE])
 {
-	return id[0] == 0x0 && !memcmp(id,
-				       id + 1,
-				       crypto_box_PUBLICKEYBYTES - 1);
+	return id[0] == 0x0 && !memcmp(id, id + 1, PUBLIC_KEY_SIZE - 1);
 }
 
 /**
@@ -66,7 +64,7 @@ identity_t *identity_find(const linkedlist_t	*identities,
 		/* if the identifier represents one of our identities */
 		if (!memcmp(identity->keypair.public_key,
 			    identifier,
-			    crypto_box_PUBLICKEYBYTES)) {
+			    PUBLIC_KEY_SIZE)) {
 			return identity;
 		}
 
@@ -333,9 +331,7 @@ peer_t *peer_find(const linkedlist_t	*peers,
 	node = linkedlist_get_first(peers);
 	while (node) {
 		peer = (peer_t *) node->data;
-		if (!memcmp(peer->identifier,
-			    identifier,
-			    crypto_box_PUBLICKEYBYTES)) {
+		if (!memcmp(peer->identifier, identifier, PUBLIC_KEY_SIZE)) {
 			return peer;
 		}
 		node = linkedlist_get_next(peers, node);
@@ -365,7 +361,7 @@ peer_t *peer_store(linkedlist_t		*peers,
 	}
 
 	linkedlist_init(&new_peer->nonces);
-	memcpy(new_peer->identifier, identifier, crypto_box_PUBLICKEYBYTES);
+	memcpy(new_peer->identifier, identifier, PUBLIC_KEY_SIZE);
 	memset(&new_peer->presence_nonce, 0x0, sizeof(nonce_t));
 
 	if (!(new_peer->node = linkedlist_append(peers, new_peer))) {

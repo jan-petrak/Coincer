@@ -16,11 +16,11 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <sodium.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "autoconfig.h"
+#include "crypto.h"
 #include "daemon_messages.h"
 #include "hosts.h"
 #include "log.h"
@@ -188,7 +188,7 @@ int create_p2p_route_sol(message_t *message, const unsigned char *target)
 		return 1;
 	}
 
-	memcpy(route_sol->target, target, crypto_box_PUBLICKEYBYTES);
+	memcpy(route_sol->target, target, PUBLIC_KEY_SIZE);
 
 	message->body.type = P2P_ROUTE_SOL;
 	message->body.data = route_sol;

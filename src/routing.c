@@ -170,19 +170,19 @@ static int message_finalize(message_t			*message,
 	message->version = PROTOCOL_VERSION;
 	memcpy(message->from,
 	       from->keypair.public_key,
-	       crypto_box_PUBLICKEYBYTES);
+	       PUBLIC_KEY_SIZE);
 
 	if (dest_vis == DV_HIDDEN) {
-		memset(message->body.to, 0x0, crypto_box_PUBLICKEYBYTES);
+		memset(message->body.to, 0x0, PUBLIC_KEY_SIZE);
 	} else {
-		memcpy(message->body.to, to, crypto_box_PUBLICKEYBYTES);
+		memcpy(message->body.to, to, PUBLIC_KEY_SIZE);
 	}
 
 	nonce_value = from->nonce_value + 1;
 
 	cmp_val = memcmp(message->from,
 			 message->body.to,
-			 crypto_box_PUBLICKEYBYTES);
+			 PUBLIC_KEY_SIZE);
 	/* from ID > to ID => odd nonce; from ID < to ID => even nonce */
 	if ((cmp_val > 0 && !(nonce_value & 0x01)) ||
 	    (cmp_val < 0 && (nonce_value & 0x01))) {
@@ -359,7 +359,7 @@ static int message_trace_store(linkedlist_t		*msg_traces,
 	msg_trace->sender = sender;
 	msg_trace->nonce_value = nonce_value;
 	msg_trace->creation = time(NULL);
-	memcpy(msg_trace->from, from, crypto_box_PUBLICKEYBYTES);
+	memcpy(msg_trace->from, from, PUBLIC_KEY_SIZE);
 
 	if (!linkedlist_append(msg_traces, msg_trace)) {
 		log_error("Storing a message trace");
@@ -459,7 +459,7 @@ route_t *route_find(const linkedlist_t	*routing_table,
 		route = (route_t *) node->data;
 		id = route->destination->identifier;
 
-		if (!memcmp(id, dest_id, crypto_box_PUBLICKEYBYTES)) {
+		if (!memcmp(id, dest_id, PUBLIC_KEY_SIZE)) {
 			return route;
 		}
 
@@ -579,7 +579,7 @@ int routing_loop_detect(const linkedlist_t	*msg_traces,
 		/* the same message but different neighbour => routing loop */
 		if (msg_trace->nonce_value == nonce_value &&
 		    msg_trace->sender != neighbour &&
-		    !memcmp(msg_trace->from, from, crypto_box_PUBLICKEYBYTES)) {
+		    !memcmp(msg_trace->from, from, PUBLIC_KEY_SIZE)) {
 			return 1;
 		}
 

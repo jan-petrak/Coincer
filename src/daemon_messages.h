@@ -22,6 +22,7 @@
 #include <sodium.h>
 #include <stdint.h>
 
+#include "crypto.h"
 #include "linkedlist.h"
 
 /** Current version of coincer daemon protocol. */
@@ -62,14 +63,14 @@ typedef struct s_p2p_peers_adv {
  */
 typedef struct s_p2p_route_sol {
 	/** The peer's identifier. */
-	unsigned char target[crypto_box_PUBLICKEYBYTES];
+	unsigned char target[PUBLIC_KEY_SIZE];
 } p2p_route_sol_t;
 
 /**
  * Internal message body representation.
  */
 typedef struct s_message_body {
-	unsigned char	  to[crypto_box_PUBLICKEYBYTES]; /**< Destination. */
+	unsigned char	  to[PUBLIC_KEY_SIZE]; /**< Destination. */
 	enum message_type type; /**< Message type. */
 	void		  *data; /**< Message content. */
 	uint64_t	  nonce; /**< Message's nonce. */
@@ -80,9 +81,9 @@ typedef struct s_message_body {
  */
 typedef struct s_message {
 	int		version; /**< Protocol version. */
-	unsigned char	from[crypto_box_PUBLICKEYBYTES]; /**< Sender. */
+	unsigned char	from[PUBLIC_KEY_SIZE]; /**< Sender. */
 	message_body_t	body; /**< Message body. */
-	unsigned char	sig[crypto_sign_BYTES]; /**< Signature. */
+	unsigned char	sig[SIGNATURE_SIZE]; /**< Signature. */
 } message_t;
 
 int create_p2p_bye(message_t *message);

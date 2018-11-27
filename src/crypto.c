@@ -21,6 +21,96 @@
 #include <string.h>
 
 #include "crypto.h"
+#include "log.h"
+
+/**
+ * Decrypt a message into a parameter that is dynamically allocated in here.
+ *
+ * @param	message		The message to be decrypted.
+ * @param	public_key	The public key used for decryption.
+ * @param	secret_key	The secret key used for decryption.
+ * @param	decrypted	Dynamically allocated decrypted message.
+ *
+ * @return	0		Successfully decrypted.
+ * @return	1		Failure.
+ */
+int decrypt_message(const char		*message,
+		    const unsigned char public_key[PUBLIC_KEY_SIZE],
+		    const unsigned char	secret_key[SECRET_KEY_SIZE],
+		    char		**decrypted)
+{
+	size_t	decrypted_len;
+	size_t	msg_len;
+	int	res;
+
+	msg_len	      = strlen(message);
+	decrypted_len = msg_len - crypto_box_SEALBYTES;
+
+	*decrypted = (char *) malloc((decrypted_len + 1) * sizeof(char));
+	if (!*decrypted) {
+		log_error("Allocation of a decrypted message");
+		return 1;
+	}
+
+	if (!(res = crypto_box_seal_open((unsigned char *) *decrypted,
+					 (const unsigned char *) message,
+					 msg_len,
+					 public_key,
+					 secret_key))) {
+		decrypted[decrypted_len] = '\0';
+	} else {
+		free(decrypted);
+	}
+
+	return res;
+}
+
+/**
+ * Encrypt a message into a parameter that is dynamically allocated in here.
+ *
+ * @param	message		The message to be encrypted.
+ * @param	public_key	The public key used for encryption.
+ * @param	encrypted	Dynamically allocated encrypted message.
+ *
+ * @return	0		Successfully encrypted.
+ * @return	1		Failure.
+ */
+int encrypt_message(const char		*message,
+		    const unsigned char public_key[PUBLIC_KEY_SIZE],
+		    char		**encrypted)
+{
+	size_t encrypted_len;
+	size_t msg_len;
+
+	msg_len	      = strlen(message);
+	encrypted_len = crypto_box_SEALBYTES + msg_len;
+
+	*encrypted = (char *) malloc((encrypted_len + 1) * sizeof(char));
+	if (!*encrypted) {
+		log_error("Allocation of an encrypted message");
+		return 1;
+	}
+
+	crypto_box_seal((unsigned char *) *encrypted,
+			(const unsigned char *) message,
+			msg_len,
+			public_key);
+
+	(*encrypted)[encrypted_len] = '\0';
+
+	return 0;
+}
+
+/**
+ * Fetch random value.
+ *
+ * @param	value		Store the random value in here.
+ * @param	value_size	Size of the value in bytes.
+ */
+void fetch_random_value(void *value, size_t value_size)
+{
+	randombytes_buf(value, value_size);
+}
 
 /**
  * Generate a keypair.
@@ -60,28 +150,54 @@ uint64_t get_random_uint64_t(void)
 }
 
 /**
- * Create a hash of a string.
+ * Check hash of a message.
  *
- * @param	string_message	Create a hash of this string.
- * @param	hash		Store the hash in here.
+ * @param	type		Hashing function.
+ * @param	hash		Hash to be checked.
+ * @param	message		Hash of this message.
+ * @param	message_size	Size of the message.
  *
- * @return	0		Hash successfully created.
- * @return	-1		Hashing failed.
+ * @return	0		The hashes match.
+ * @return	1		The hashes don't match.
  */
-int hash_message(const char		*string_message,
-		 unsigned char		hash[crypto_generichash_BYTES])
+int hash_check(enum hash_type		type,
+	       const unsigned char	*hash,
+	       const unsigned char	*message,
+	       size_t			message_size)
 {
-	/* from libsodium doc: 'key can be NULL and keylen can be 0. In this
-	 * case, a message will always have the same fingerprint, similar to
-	 * the MD5 or SHA-1 functions for which crypto_generichash() is a
-	 * faster and more secure alternative.'
-	 */
-	return crypto_generichash(hash,
-				  crypto_generichash_BYTES,
-				  (const unsigned char *) string_message,
-				  strlen(string_message),
-				  NULL,
-				  0);
+	/* TODO: Implement using wolfssl */
+
+	switch (type) {
+		case HT_SHA3_256:
+			break;
+		case HT_RIPEMD_160:
+			break;
+	}
+
+	return 0;
+}
+
+/**
+ * Hash a message.
+ *
+ * @param	type		Hashing function.
+ * @param	message		Hash this message.
+ * @param	message_size	Size of the message.
+ * @param	hash		The result hash.
+ */
+void hash_message(enum hash_type	type,
+		  const unsigned char	*message,
+		  size_t		message_size,
+		  unsigned char		*hash)
+{
+	/* TODO: Implement using wolfssl */
+
+	switch (type) {
+		case HT_SHA3_256:
+			break;
+		case HT_RIPEMD_160:
+			break;
+	}
 }
 
 /**
@@ -92,8 +208,8 @@ int hash_message(const char		*string_message,
  * @param	signature		Store the result in here.
  */
 void sign_message(const char		*string_message,
-		  const unsigned char	secret_key[crypto_box_SECRETKEYBYTES],
-		  unsigned char		signature[crypto_sign_BYTES])
+		  const unsigned char	secret_key[SECRET_KEY_SIZE],
+		  unsigned char		signature[SIGNATURE_SIZE])
 {
 	/* from libsodium doc: It is safe to ignore siglen and always consider
 	 * a signature as crypto_sign_BYTES bytes long: shorter signatures
@@ -117,8 +233,8 @@ void sign_message(const char		*string_message,
  * @param	1			Invalid signature.
  */
 int verify_signature(const char		 *string_message,
-		     const unsigned char public_key[crypto_box_PUBLICKEYBYTES],
-		     const unsigned char signature[crypto_sign_BYTES])
+		     const unsigned char public_key[PUBLIC_KEY_SIZE],
+		     const unsigned char signature[SIGNATURE_SIZE])
 {
 	return crypto_sign_verify_detached(signature,
 					(const unsigned char *) string_message,

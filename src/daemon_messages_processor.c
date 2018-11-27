@@ -236,7 +236,7 @@ static enum process_message_result
 		 *  the message should be a broadcast (we will check later) */
 		if (memcmp(message->from,
 			   sender->pseudonym.identifier,
-			   crypto_box_PUBLICKEYBYTES)) {
+			   PUBLIC_KEY_SIZE)) {
 			/* process the broadcast with the true identity */
 			identity = global_state->true_identity;
 		/* otherwise it is a n2n message */
@@ -247,16 +247,14 @@ static enum process_message_result
 			/* for later parity check */
 			cmp_val = memcmp(message->from,
 					 identity->keypair.public_key,
-					 crypto_box_PUBLICKEYBYTES);
+					 PUBLIC_KEY_SIZE);
 		}
 	/* the message is of type p2p */
 	} else {
 		/* identity will be NULL if the message is not meant for us */
 		identity = identity_find(identities, msg_body->to);
 		/* for later parity check */
-		cmp_val = memcmp(message->from,
-				 msg_body->to,
-				 crypto_box_PUBLICKEYBYTES);
+		cmp_val = memcmp(message->from, msg_body->to, PUBLIC_KEY_SIZE);
 	}
 
 	/* nonce parity check; the message must have:
@@ -494,9 +492,7 @@ static int process_p2p_hello(const message_t	*message,
 		sender->host->port = hello->port;
 	}
 
-	memcpy(sender->pseudonym.identifier,
-	       message->from,
-	       crypto_box_PUBLICKEYBYTES);
+	memcpy(sender->pseudonym.identifier, message->from, PUBLIC_KEY_SIZE);
 
 	set_neighbour_flags(sender, NEIGHBOUR_ACTIVE);
 
