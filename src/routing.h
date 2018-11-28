@@ -28,6 +28,7 @@
 #include "linkedlist.h"
 #include "neighbours.h"
 #include "peers.h"
+#include "trade.h"
 
 /** After this many seconds we consider a message trace to be stale. */
 #define MESSAGE_TRACE_STALE_TIME 60
@@ -105,5 +106,13 @@ int send_p2p_route_adv(linkedlist_t *neighbours, identity_t *identity);
 int send_p2p_route_sol(linkedlist_t	   *neighbours,
 		       identity_t	   *identity,
 		       const unsigned char *target);
+
+int send_trade_execution(linkedlist_t *routing_table, const trade_t *trade);
+int send_trade_proposal(global_state_t		*global_state,
+			const unsigned char	*order_id);
+int send_trade_reject(linkedlist_t		*routing_table,
+		      identity_t		*identity,
+		      const unsigned char	*dest_id,
+		      const unsigned char	*order_id);
 
 #endif /* ROUTING_H */

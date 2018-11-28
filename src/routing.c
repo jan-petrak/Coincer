@@ -34,6 +34,7 @@
 #include "neighbours.h"
 #include "peers.h"
 #include "routing.h"
+#include "trade.h"
 
 /**
  * Simple helper to determine the destination visibility of a message.
@@ -662,6 +663,40 @@ int send_market_cancel(linkedlist_t *neighbours, order_t *order)
 }
 
 /**
+ * Send encrypted message.
+ *
+ * @param	routing_table		The routing table.
+ * @param	identity		Send the message under this identity.
+ * @param	dest_id			Destination identifier.
+ * @param	encrypted_payload	Encrypted data to be sent.
+ *
+ * @return	0			Successfully sent.
+ * @return	1			Failure.
+ */
+static int send_encrypted(linkedlist_t		*routing_table,
+			  identity_t		*identity,
+			  const unsigned char	*dest_id,
+			  const char		*encrypted_payload)
+{
+	message_t encrypted;
+	int	  ret;
+
+	if (create_encrypted(&encrypted, encrypted_payload)) {
+		return 1;
+	}
+
+	if (!(ret = message_finalize(&encrypted,
+				     identity,
+				     dest_id,
+				     DV_SHOWN))) {
+		ret = message_send_p2p(&encrypted, routing_table);
+	}
+
+	message_delete(&encrypted);
+	return ret;
+}
+
+/**
  * Send p2p.bye message.
  *
  * @param	neighbours	Our neighbours.
@@ -873,6 +908,192 @@ int send_p2p_route_sol(linkedlist_t	   *neighbours,
 	}
 
 	message_delete(&p2p_route_sol_msg);
+	return ret;
+}
+
+/**
+ * Send trade.execution of a trade.
+ *
+ * @param	routing_table	The routing table.
+ * @param	trade		The trade.
+ *
+ * @return	0		Successfully sent.
+ * @return	1		Failure.
+ */
+int send_trade_execution(linkedlist_t *routing_table, const trade_t *trade)
+{
+	char			*encoded;
+	char			*encrypted;
+	int			ret;
+	trade_execution_t	*trade_execution;
+
+	if (create_trade_execution(&trade_execution, trade)) {
+		log_error("Creating trade.execution");
+		return 1;
+	}
+	if (encode_trade_execution(trade_execution,
+				   trade->type,
+				   trade->step,
+				   &encoded)) {
+		log_error("Encoding trade.execution");
+		trade_execution_delete(trade_execution,
+				       trade->type,
+				       trade->step);
+		return 1;
+	}
+	if (encrypt_message(encoded, trade->cp_identifier, &encrypted)) {
+		log_error("Encrypting trade.execution");
+		trade_execution_delete(trade_execution,
+				       trade->type,
+				       trade->step);
+		free(encoded);
+		return 1;
+	}
+
+	ret = send_encrypted(routing_table,
+			     trade->my_identity,
+			     trade->cp_identifier,
+			     encrypted);
+
+	trade_execution_delete(trade_execution, trade->type, trade->step);
+	free(encoded);
+	free(encrypted);
+
+	return ret;
+}
+
+/**
+ * Send trade.proposal for an order and create a new trade for it.
+ *
+ * @param	global_state	The global state.
+ * @param	order_id	Id of the order.
+ *
+ * @return	0		Successfully sent.
+ * @return	1		Failure.
+ */
+int send_trade_proposal(global_state_t		*global_state,
+			const unsigned char	*order_id)
+{
+	char			*encoded;
+	char			*encrypted;
+	order_t			*order;
+	trade_t			*trade;
+	trade_proposal_t	*trade_proposal;
+	enum trade_type		trade_type;
+	int			ret;
+
+	if (!(order = order_find(&global_state->orders, order_id))) {
+		log_debug("send_trade_proposal - trade.proposal for unknown "
+			  "order");
+		return 1;
+	}
+	if (!(order->flags & ORDER_FOREIGN)) {
+		log_debug("send_trade_proposal - trade.proposal for a trade "
+			  "that was created by us");
+		return 1;
+	}
+
+	/* TODO: Set trading type depending on what we want to trade */
+	trade_type = TT_BASIC;
+
+	if (!(trade = trade_create(&global_state->trades,
+				   &global_state->identities,
+				   order,
+				   order->owner.cp->identifier,
+				   trade_type))) {
+		log_error("Creating a trade in a trade proposal");
+		return 1;
+	}
+	if (trade_step_perform(trade, global_state)) {
+		log_error("Initializing trade.proposal's data");
+		linkedlist_delete_safely(trade->node, trade_clear);
+		return 1;
+	}
+
+	if (create_trade_proposal(&trade_proposal, trade)) {
+		log_error("Creating trade.proposal");
+		linkedlist_delete_safely(trade->node, trade_clear);
+		return 1;
+	}
+	if (encode_payload(TRADE_PROPOSAL, trade_proposal, &encoded)) {
+		log_error("Encoding trade.proposal");
+		linkedlist_delete_safely(trade->node, trade_clear);
+		payload_delete(TRADE_PROPOSAL, trade_proposal);
+		return 1;
+	}
+	if (encrypt_message(encoded, trade->cp_identifier, &encrypted)) {
+		log_error("Encrypting trade.proposal");
+		linkedlist_delete_safely(trade->node, trade_clear);
+		payload_delete(TRADE_PROPOSAL, trade_proposal);
+		free(encoded);
+		return 1;
+	}
+
+	if (!(ret = send_encrypted(&global_state->routing_table,
+				   trade->my_identity,
+				   trade->cp_identifier,
+				   encrypted))) {
+		linkedlist_delete_safely(trade->node, trade_clear);
+		log_error("Sending trade.proposal");
+	} else {
+		order_flags_set(order, ORDER_TRADING);
+	}
+
+	payload_delete(TRADE_PROPOSAL, trade_proposal);
+	free(encoded);
+	free(encrypted);
+
+	return ret;
+}
+
+/**
+ * Send trade.reject message.
+ *
+ * @param	routing_table	The routing table.
+ * @param	identity	Send the message under this identity.
+ * @param	dest_id		Destination identifier.
+ * @param	order_id	Order identifier.
+ *
+ * @return	0		Successfully sent.
+ * @return	1		Failure.
+ */
+int send_trade_reject(linkedlist_t		*routing_table,
+		      identity_t		*identity,
+		      const unsigned char	*dest_id,
+		      const unsigned char	*order_id)
+{
+	char		*encoded;
+	char		*encrypted;
+	int		ret;
+	trade_reject_t	*trade_reject;
+
+	if (create_trade_reject(&trade_reject, order_id)) {
+		log_error("Initializing trade.reject");
+		return 1;
+	}
+	if (encode_payload(TRADE_REJECT, trade_reject, &encoded)) {
+		log_error("Encoding trade.reject");
+		payload_delete(TRADE_REJECT, trade_reject);
+		return 1;
+	}
+	if (encrypt_message(encoded, dest_id, &encrypted)) {
+		log_error("Encrypting trade.reject");
+		payload_delete(TRADE_REJECT, trade_reject);
+		free(encoded);
+		return 1;
+	}
+
+	if (!(ret = send_encrypted(routing_table,
+				   identity,
+				   dest_id,
+				   encrypted))) {
+		log_error("Sending trade.reject");
+	}
+
+	payload_delete(TRADE_REJECT, trade_reject);
+	free(encoded);
+	free(encrypted);
+
 	return ret;
 }
 

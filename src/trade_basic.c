@@ -29,6 +29,7 @@
 #include "global_state.h"
 #include "json_parser.h"
 #include "log.h"
+#include "routing.h"
 #include "trade.h"
 #include "trade_basic.h"
 
@@ -459,6 +460,12 @@ int trade_step_basic_perform(trade_t *trade, global_state_t *global_state)
 				     trade_data->my_committed,
 				     TRADE_BASIC_COMMITTED_SIZE,
 				     trade_data->my_commitment);
+
+			if (send_trade_execution(&global_state->routing_table,
+						 trade)) {
+				log_error("Sending trade.execution");
+				return 1;
+			}
 			break;
 		case TS_KEY_AND_COMMITTED_EXCHANGE:
 			generate_keypair(&trade->my_keypair);
@@ -469,6 +476,12 @@ int trade_step_basic_perform(trade_t *trade, global_state_t *global_state)
 					log_error("Creating a trade script");
 					return 1;
 				}
+			}
+
+			if (send_trade_execution(&global_state->routing_table,
+						 trade)) {
+				log_error("Sending trade.execution");
+				return 1;
 			}
 			break;
 		case TS_SCRIPT_ORIGIN:
@@ -485,10 +498,22 @@ int trade_step_basic_perform(trade_t *trade, global_state_t *global_state)
 				log_error("Creating a trade script");
 				return 1;
 			}
+
+			if (send_trade_execution(&global_state->routing_table,
+						 trade)) {
+				log_error("Sending trade.execution");
+				return 1;
+			}
 			break;
 		case TS_SCRIPT_RESPONSE:
 			if (trade_script_generate(trade, global_state)) {
 				log_error("Creating a trade script");
+				return 1;
+			}
+
+			if (send_trade_execution(&global_state->routing_table,
+						 trade)) {
+				log_error("Sending trade.execution");
 				return 1;
 			}
 			break;
