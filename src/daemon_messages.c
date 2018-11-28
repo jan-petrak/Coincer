@@ -24,6 +24,46 @@
 #include "daemon_messages.h"
 #include "hosts.h"
 #include "log.h"
+#include "trade.h"
+#include "trade_basic.h"
+
+static int create_trade_execution_basic(trade_execution_basic_t **basic,
+					const trade_t		*trade);
+
+/**
+ * Create encrypted and store it in a message.
+ *
+ * @param	message			Store encrypted in this message.
+ * @param	encrypted_payload	Encrypted data.
+ *
+ * @return	0			Successfully created.
+ * @return	1			Failure.
+ */
+int create_encrypted(message_t *message, const char *encrypted_payload)
+{
+	encrypted_t *encrypted;
+	char	    *payload;
+
+	encrypted = (encrypted_t *) malloc(sizeof(encrypted_t));
+	if (!encrypted) {
+		log_error("Creating encrypted");
+		return 1;
+	}
+	payload = (char *) malloc(strlen(encrypted_payload + 1) * sizeof(char));
+	if (!payload) {
+		log_error("Creating encrypted payload");
+		free(encrypted);
+		return 1;
+	}
+	strcpy(payload, encrypted_payload);
+
+	encrypted->payload = payload;
+
+	message->body.type = ENCRYPTED;
+	message->body.data = encrypted;
+
+	return 0;
+}
 
 /**
  * Create a p2p.bye and store it in a message.
@@ -197,24 +237,196 @@ int create_p2p_route_sol(message_t *message, const unsigned char *target)
 }
 
 /**
+ * Create trade.execution payload.
+ *
+ * @param	execution	Store data to this trade.execution.
+ * @param	trade		Get data from this trade.
+ *
+ * @return	0		Successfully created.
+ * @return	1		Failure.
+ */
+int create_trade_execution(trade_execution_t **execution, const trade_t *trade)
+{
+	int ret = 1;
+
+	*execution = malloc(sizeof(trade_execution_t));
+	if (!*execution) {
+		log_error("Creating trade.execution");
+		return 1;
+	}
+
+	memcpy((*execution)->order, trade->order->id, SHA3_256_SIZE);
+
+	switch (trade->type) {
+		case TT_BASIC:
+			ret = create_trade_execution_basic(&(*execution)->data,
+							   trade);
+	}
+
+	if (ret) {
+		free(execution);
+	}
+
+	return ret;
+}
+
+/**
+ * Create trade.execution of type basic.
+ *
+ * @param	basic		Basic execution data holder to be dynamically
+ *				allocated and initialized in here.
+ * @param	trade		Trade to create trade.execution for.
+ *
+ * @return	0		Successfully created.
+ * @return	1		Failure.
+ */
+static int create_trade_execution_basic(trade_execution_basic_t **basic,
+					const trade_t		*trade)
+{
+	trade_execution_basic_t *exec_data;
+	char *script;
+	trade_basic_t *trade_data;
+
+	trade_data = (trade_basic_t *) trade->data;
+
+	exec_data = (trade_execution_basic_t *) malloc(
+					sizeof(trade_execution_basic_t));
+	if (!exec_data) {
+		log_error("Creating trade execution data");
+		return 1;
+	}
+
+	*basic = exec_data;
+
+	switch (trade->step) {
+		case TS_COMMITMENT:
+			memcpy(exec_data->commitment,
+			       trade_data->my_commitment,
+			       SHA3_256_SIZE);
+			break;
+		case TS_KEY_AND_COMMITTED_EXCHANGE:
+			memcpy(exec_data->pubkey,
+			       trade->my_keypair.public_key,
+			       PUBLIC_KEY_SIZE);
+			memcpy(exec_data->committed,
+			       trade_data->my_committed,
+			       TRADE_BASIC_COMMITTED_SIZE);
+			if (!trade_data->my_script) {
+				break;
+			}
+		case TS_SCRIPT_ORIGIN:
+			script = (char *) malloc(
+					(strlen(trade_data->my_script) + 1) *
+					sizeof(char));
+			if (!script) {
+				log_error("Script for trade.execution message");
+				return 1;
+			}
+			strcpy(script, trade_data->my_script);
+			exec_data->script = script;
+
+			memcpy(exec_data->hx, trade_data->hx, RIPEMD_160_SIZE);
+			break;
+		case TS_SCRIPT_RESPONSE:
+			script = (char *) malloc(
+					(strlen(trade_data->my_script) + 1) *
+					sizeof(char));
+			if (!script) {
+				log_error("Script for trade.execution message");
+				return 1;
+			}
+			strcpy(script, trade_data->my_script);
+			exec_data->script = script;
+			break;
+		default:
+			log_error("Non-existent step for trade.execution "
+				  "creation");
+			return 1;
+	}
+
+	return 0;
+}
+
+/**
+ * Create trade.proposal payload.
+ *
+ * @param	trade_proposal	trade.proposal to be created.
+ * @param	trade		trade.proposal of this trade.
+ *
+ * @return	0		Successfully created.
+ * @return	1		Failure.
+ */
+int create_trade_proposal(trade_proposal_t	**trade_proposal,
+			  const trade_t		*trade)
+{
+	trade_proposal_t *proposal;
+
+	proposal = (trade_proposal_t *) malloc(sizeof(trade_proposal_t));
+	if (!proposal) {
+		log_error("Creating trade.proposal");
+		return 1;
+	}
+
+	*trade_proposal = proposal;
+
+	trade_proposal_init(proposal, trade);
+
+	return 0;
+}
+
+/**
+ * Create trade.reject payload.
+ *
+ * @param	trade_reject	trade.reject to be created.
+ * @param	order_id	trade.reject's order ID.
+ *
+ * @return	0		Successfully created.
+ * @return	1		Failure.
+ */
+int create_trade_reject(trade_reject_t		**trade_reject,
+			const unsigned char	*order_id)
+{
+	trade_reject_t *reject;
+
+	reject = (trade_reject_t *) malloc(sizeof(trade_reject_t));
+	if (!reject) {
+		log_error("Creating trade.reject");
+		return 1;
+	}
+
+	*trade_reject = reject;
+
+	memcpy(reject->order, order_id, SHA3_256_SIZE);
+
+	return 0;
+}
+
+/**
  * Safely delete a message.
  *
  * @param	message		Delete this message.
  */
 void message_delete(message_t *message)
 {
-	message_body_t *body = &message->body;
+	void *data = message->body.data;
 
-	switch (body->type) {
+	if (!data) {
+		return;
+	}
+
+	switch (message->body.type) {
+		case ENCRYPTED:
+			free(((encrypted_t *) data)->payload);
+			free(data);
 		case P2P_BYE:
 			break;
 		case P2P_HELLO:
-			free(((p2p_hello_t *) body->data)->client);
-			free(body->data);
+			free(((p2p_hello_t *) data)->client);
+			free(data);
 			break;
 		case P2P_PEERS_ADV:
-			free(((p2p_peers_adv_t *) body->data)->addresses);
-			free(body->data);
+			free(((p2p_peers_adv_t *) data)->addresses);
+			free(data);
 			break;
 		case P2P_PEERS_SOL:
 			break;
@@ -225,9 +437,27 @@ void message_delete(message_t *message)
 		case P2P_ROUTE_ADV:
 			break;
 		case P2P_ROUTE_SOL:
-			free(body->data);
+			free(data);
 			break;
 		default:
+			break;
+	}
+}
+
+/**
+ * Safely delete a message payload.
+ *
+ * @param	type		Type of the message payload.
+ * @param	data		Payload's data.
+ */
+void payload_delete(enum payload_type type, void *data)
+{
+	switch (type) {
+		case TRADE_PROPOSAL:
+			free(data);
+			break;
+		case TRADE_REJECT:
+			free(data);
 			break;
 	}
 }

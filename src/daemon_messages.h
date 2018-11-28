@@ -24,12 +24,16 @@
 
 #include "crypto.h"
 #include "linkedlist.h"
+#include "trade.h"
 
 /** Current version of coincer daemon protocol. */
 #define PROTOCOL_VERSION 1
 
 /** Types of daemon messages. */
 enum message_type {
+	/* encrypted */
+	ENCRYPTED, /**< Encrypted message inside. */
+	/* p2p */
 	P2P_BYE, /**< Peer departure announcement. */
 	P2P_HELLO, /**< Initial message between two neighbours. */
 	P2P_PEERS_ADV, /**< Known hosts addresses advertisement.*/
@@ -39,6 +43,22 @@ enum message_type {
 	P2P_ROUTE_ADV, /**< Peer reachability advertisement. */
 	P2P_ROUTE_SOL /**< Peer reachability solicitation. */
 };
+
+/**
+ * Types of encrypted payloads.
+ */
+enum payload_type {
+	TRADE_EXECUTION, /**< Trade execution of a certain trade step. */
+	TRADE_PROPOSAL, /**< Trade proposal. */
+	TRADE_REJECT /**< Rejection of a trading proposal. */
+};
+
+/**
+ * encrypted message data holder.
+ */
+typedef struct s_encrypted {
+	char *payload; /**< Encrypted message content. */
+} encrypted_t;
 
 /**
  * p2p.hello data holder.
@@ -86,6 +106,8 @@ typedef struct s_message {
 	unsigned char	sig[SIGNATURE_SIZE]; /**< Signature. */
 } message_t;
 
+int create_encrypted(message_t *message, const char *encrypted_payload);
+
 int create_p2p_bye(message_t *message);
 int create_p2p_hello(message_t *message, unsigned short port);
 int create_p2p_peers_adv(message_t *message, const linkedlist_t *hosts);
@@ -95,6 +117,14 @@ int create_p2p_pong(message_t *message);
 int create_p2p_route_adv(message_t *message);
 int create_p2p_route_sol(message_t *message, const unsigned char *target);
 
+int create_trade_execution(trade_execution_t	**execution,
+			   const trade_t	*trade);
+int create_trade_proposal(trade_proposal_t	**proposal,
+			  const trade_t		*trade);
+int create_trade_reject(trade_reject_t		**trade_reject,
+			const unsigned char	*order_id);
+
 void message_delete(message_t *message);
+void payload_delete(enum payload_type type, void *data);
 
 #endif /* DAEMON_MESSAGES_H */

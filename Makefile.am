@@ -14,11 +14,14 @@ src_coincerd_SOURCES = \
 	src/json_parser.c src/json_parser.h \
 	src/linkedlist.c src/linkedlist.h \
 	src/log.c src/log.h \
+	src/market.h \
 	src/neighbours.c src/neighbours.h \
 	src/p2p.c src/p2p.h \
 	src/paths.c src/paths.h \
 	src/peers.c src/peers.h \
-	src/routing.c src/routing.h
+	src/routing.c src/routing.h \
+	src/trade.c src/trade.h \
+	src/trade_basic.c src/trade_basic.h
 
 src_coincerd_CFLAGS = $(AM_CFLAGS) $(JANSSON_CFLAGS) $(LIBEVENT_CFLAGS) $(LIBSODIUM_CFLAGS)
 src_coincerd_LDADD  = $(AM_LDADD) $(JANSSON_LIBS) $(LIBEVENT_LIBS) $(LIBSODIUM_LIBS)
