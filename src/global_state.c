@@ -34,9 +34,11 @@
  */
 void global_state_clear(global_state_t *global_state)
 {
+	linkedlist_destroy(&global_state->trades, trade_clear);
 	linkedlist_destroy(&global_state->routing_table, route_clear);
 	linkedlist_destroy(&global_state->pending_neighbours, clear_neighbour);
 	linkedlist_destroy(&global_state->peers, peer_clear);
+	linkedlist_destroy(&global_state->orders, order_clear);
 	linkedlist_destroy(&global_state->neighbours, clear_neighbour);
 	linkedlist_destroy(&global_state->message_traces, NULL);
 	linkedlist_destroy(&global_state->hosts, NULL);
@@ -79,9 +81,16 @@ int global_state_init(global_state_t *global_state)
 	linkedlist_init(&global_state->hosts);
 	linkedlist_init(&global_state->message_traces);
 	linkedlist_init(&global_state->neighbours);
+	linkedlist_init(&global_state->orders);
 	linkedlist_init(&global_state->peers);
 	linkedlist_init(&global_state->pending_neighbours);
 	linkedlist_init(&global_state->routing_table);
+
+	linkedlist_init(&global_state->trades);
+	if (trades_load(&global_state->trades,
+			global_state->filepaths.trades_dir)) {
+		log_warn("Loading trades in progress has failed");
+	}
 
 	global_state->port = 0;
 

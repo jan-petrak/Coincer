@@ -130,6 +130,16 @@ int decode_message_data(const char		*json_data,
 	*data = NULL;
 
 	switch (type) {
+		case ENCRYPTED:
+			if (json_data == NULL) {
+				return 1;
+			}
+			*data = (encrypted_t *) malloc(sizeof(encrypted_t));
+			if (!*data) {
+				log_error("Allocating encrypted");
+				return 1;
+			}
+			return 0;
 		case P2P_BYE:
 			return 0;
 		case P2P_HELLO:
@@ -178,6 +188,118 @@ int decode_message_data(const char		*json_data,
 	}
 
 	return 1;
+}
+
+/* TODO: Implement */
+/**
+ * Fetch the type and the JSON data from a JSON payload.
+ *
+ * @param	json_payload	Decode this JSON payload.
+ * @param	type		Store the payload type in here.
+ * @param	json_data	Store the payload's JSON data in here.
+ *
+ * @return	0		Successfully decoded.
+ * @return	1		Failure.
+ */
+int decode_payload_type(const char		*json_payload,
+			enum payload_type	*type,
+			char			**json_data)
+{
+	return 0;
+}
+
+/* TODO: Implement */
+/**
+ * Decode JSON payload into an internal representation.
+ *
+ * @param	json_data	Decode this JSON payload.
+ * @param	type		Type of the JSON payload.
+ * @param	data		Dynamically allocated structure storing the
+ *				payload data.
+ *
+ * @return	0		Successfully decoded.
+ * @return	1		Failure.
+ */
+int decode_payload_data(const char		*json_data,
+			enum payload_type	type,
+			void			**data)
+{
+	return 0;
+}
+
+/* TODO: Implement */
+/**
+ * Decode JSON trade.execution of type basic into internal representation.
+ *
+ * @param	json_data	The JSON trade.execution.
+ * @param	step		Trade step to be decoded.
+ * @param	execution	The internal representation.
+ *
+ * @return	0		Success.
+ * @return	1		Failure.
+ */
+static int decode_trade_basic(const char	*json_data,
+			      enum trade_step	step,
+			      trade_execution_t	*execution)
+{
+	trade_execution_basic_t *data;
+
+	data = (trade_execution_basic_t *) malloc(
+					sizeof(trade_execution_basic_t));
+	if (!data) {
+		log_error("Creating trade.execution's data");
+		return 1;
+	}
+
+	execution->data = data;
+
+	switch (step) {
+		case TS_KEY_AND_COMMITTED_EXCHANGE:
+			/* if json_data doesn't contain script, set data->script
+			 * to NULL, otherwise it must also contain 'hx' */
+			break;
+	}
+
+	return 0;
+}
+
+/* TODO: Implement */
+/**
+ * Knowing the trading protocol type and the trade step, decode a JSON trade
+ * execution into internal representation.
+ *
+ * @param	json_data	JSON trade execution to be decoded.
+ * @param	type		Type of the trading protocol.
+ * @param	step		Step of the trade execution.
+ * @param	data		Dynamically allocated structure storing the
+ *				trade execution data.
+ *
+ * @return	0		Decoding successful.
+ * @return	1		Failure.
+ */
+int decode_trade_execution(const char		*json_data,
+			   enum trade_type	type,
+			   enum trade_step	step,
+			   trade_execution_t	**data)
+{
+	int ret = 1;
+
+	*data = (trade_execution_t *) malloc(sizeof(trade_execution_t));
+	if (!*data) {
+		log_error("Creating trade.execution");
+		return 1;
+	}
+
+	switch (type) {
+		case TT_BASIC:
+			ret = decode_trade_basic(json_data, step, *data);
+	}
+
+	if (ret == 1) {
+		free(*data);
+	}
+
+	return ret;
 }
 
 /* TODO: Implement */
@@ -256,6 +378,44 @@ int encode_message(const message_t *message, char **json_message)
  * @return	1		Failure.
  */
 int encode_message_body(const message_body_t *body, char **json_body)
+{
+	return 0;
+}
+
+/* TODO: Implement */
+/**
+ * Encode a payload into JSON.
+ *
+ * @param	type		Type of the payload.
+ * @param	data		Payload to be encoded.
+ * @param	encoded		Dynamically allocated string of JSON payload.
+ *
+ * @return	0		Successfully encoded.
+ * @return	1		Failure.
+ */
+int encode_payload(enum payload_type type, const void *data, char **encoded)
+{
+	return 0;
+}
+
+/* TODO: Implement */
+/**
+ * Knowing the trading protocol type and the trade step, encode a
+ * trade.execution into JSON.
+ *
+ * @param	trade_execution	trade.execution to be encoded.
+ * @param	type		Type of the trading protocol.
+ * @param	step		Step of the trade execution.
+ * @param	encoded		Dynamically allocated string of JSON
+ *				trade.execution.
+ *
+ * @return	0		Encoding successful.
+ * @return	1		Failure.
+ */
+int encode_trade_execution(const trade_execution_t	*trade_execution,
+			   enum trade_type		type,
+			   enum trade_step		step,
+			   char				**encoded)
 {
 	return 0;
 }

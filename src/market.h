@@ -39,6 +39,16 @@ typedef struct s_order {
 	linkedlist_node_t *node;
 } order_t;
 
+order_t *order_create(linkedlist_t *orders, int flags, void *owner);
+void order_clear(order_t *order);
+order_t *order_find(const linkedlist_t	*orders,
+		    const unsigned char	*order_id);
+
+int order_blacklist_append(linkedlist_t		*blacklist,
+			   const unsigned char	*identifier);
+unsigned char *order_blacklist_find(const linkedlist_t	*blacklist,
+				    const unsigned char	*identifier);
+
 void order_flags_set(order_t *order, int flags);
 void order_flags_unset(order_t *order, int flags);
 

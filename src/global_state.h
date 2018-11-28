@@ -44,6 +44,8 @@ typedef struct s_global_state {
 	linkedlist_t message_traces;
 	/** Linked list of our neighbours. */
 	linkedlist_t neighbours;
+	/** Known orders. */
+	linkedlist_t orders;
 	/** Known peers. */
 	linkedlist_t peers;
 	/** Hosts that didn't accept/reject us yet. */
@@ -52,6 +54,8 @@ typedef struct s_global_state {
 	unsigned short port;
 	/** Routes to hosts. */
 	linkedlist_t routing_table;
+	/** List of our trades. */
+	linkedlist_t trades;
 	/** Our true identity. */
 	identity_t *true_identity;
 } global_state_t;

@@ -29,8 +29,10 @@
 #include "hosts.h"
 #include "json_parser.h"
 #include "log.h"
+#include "market.h"
 #include "neighbours.h"
 #include "routing.h"
+#include "trade.h"
 
 /** The minimum time in seconds that has to pass between the announcements of
  *  presence of one identity. */
@@ -42,6 +44,26 @@ static enum process_message_result
 			const char	*json_data,
 			neighbour_t	*sender,
 			global_state_t	*global_state);
+
+static int process_encrypted(const encrypted_t	 *encrypted_payload,
+			     identity_t		 *identity,
+			     const unsigned char *sender_id,
+			     global_state_t	 *global_state);
+
+static int process_trade_execution(const trade_execution_t *trade_execution,
+				   enum trade_step	   execution_step,
+				   trade_t		   *trade,
+				   identity_t		   *identity,
+				   const unsigned char	   *sender_id,
+				   global_state_t	   *global_state);
+static int process_trade_proposal(const trade_proposal_t *trade_proposal,
+				  identity_t		 *identity,
+				  const unsigned char	 *sender_id,
+				  global_state_t	 *global_state);
+static int process_trade_reject(const trade_reject_t	*trade_reject,
+				const identity_t	*my_identity,
+				const unsigned char	*sender_id,
+				trade_t			*trade);
 
 static int process_p2p_bye(const message_t	*message,
 			   const char		*json_message,
@@ -339,6 +361,12 @@ static enum process_message_result
 	}
 
 	switch (msg_type) {
+		case ENCRYPTED:
+			res = process_encrypted(msg_body->data,
+						identity,
+						sender_peer->identifier,
+						global_state);
+			break;
 		case P2P_BYE:
 			res = process_p2p_bye(message,
 					      json_message,
@@ -412,6 +440,127 @@ static enum process_message_result
 	sender->failed_pings = 0;
 
 	return PMR_DONE;
+}
+
+/**
+ * Process encrypted message.
+ *
+ * @param	encrypted_payload	The encrypted payload.
+ * @param	identity		Process under this identity.
+ * @param	sender_id		Sender's identifier.
+ * @param	global_state		Global state.
+ *
+ * @return	0			Successfully processed.
+ * @return	1			Failure.
+ */
+static int process_encrypted(const encrypted_t	 *encrypted_payload,
+			     identity_t		 *identity,
+			     const unsigned char *sender_id,
+			     global_state_t	 *global_state)
+{
+	void			*data;
+	char			*json_payload;
+	char			*json_payload_data;
+	enum trade_step		next_step;
+	enum payload_type	payload_type;
+	int			res;
+	trade_t			*trade;
+	enum trade_type		trade_type;
+
+	if (decrypt_message(encrypted_payload->payload,
+			    identity->keypair.public_key,
+			    identity->keypair.secret_key,
+			    &json_payload)) {
+		log_debug("process_encrypted - decrypting message payload has "
+			  "failed. Payload:\n%s", encrypted_payload->payload);
+		return 1;
+	}
+	if (decode_payload_type(json_payload,
+				&payload_type,
+				&json_payload_data)) {
+		log_debug("process_encrypted - decoding decrypted payload "
+			  "has failed. Payload:\n%s", json_payload);
+		free(json_payload);
+		return 1;
+	}
+
+	free(json_payload);
+
+	/* trade.execution has its own parsing function */
+	if (payload_type != TRADE_EXECUTION) {
+		if (decode_payload_data(json_payload_data,
+					payload_type,
+					&data)) {
+			log_debug("process_encrypted - decoding payload's data "
+				  "has failed. Data:\n%s", json_payload_data);
+			free(json_payload_data);
+			return 1;
+		}
+	}
+
+	switch (payload_type) {
+		case TRADE_EXECUTION:
+			if (!(trade = trade_find(&global_state->trades,
+						 identity,
+						 trade_cmp_identity))) {
+				log_debug("process_encrypted - execution of "
+					  "unknown trade received");
+				free(json_payload_data);
+				return 1;
+			}
+			trade_type = trade->type;
+			next_step  = trade_step_get_next(trade);
+			/* attept to decode the next step of the agreed
+			 * trading protocol */
+			if (decode_trade_execution(json_payload_data,
+						   trade_type,
+						   next_step,
+						   &data)) {
+				log_debug("process_encrypted - decoding "
+					  "trade.execution failed");
+				free(json_payload_data);
+				return 1;
+			}
+			res = process_trade_execution(data,
+						      next_step,
+						      trade,
+						      identity,
+						      sender_id,
+						      global_state);
+			trade_execution_delete(data, trade_type, next_step);
+			break;
+		case TRADE_PROPOSAL:
+			res = process_trade_proposal(data,
+						     identity,
+						     sender_id,
+						     global_state);
+			break;
+		case TRADE_REJECT:
+			if (!(trade = trade_find(&global_state->trades,
+						 identity,
+						 trade_cmp_identity))) {
+				log_debug("process_encrypted - rejection of "
+					  "an unknown trade arrived");
+				break;
+			}
+			res = process_trade_reject(data,
+						   identity,
+						   sender_id,
+						   trade);
+			break;
+		default:
+			log_debug("process_encrypted - wrong message type");
+			res = 1;
+	}
+
+	free(json_payload_data);
+
+	/* trade.execution has its own clean up function */
+	if (payload_type != TRADE_EXECUTION) {
+		payload_delete(payload_type, data);
+	}
+
+	return res;
 }
 
 /**
@@ -713,6 +862,181 @@ static int process_p2p_route_sol(const message_t *message,
 		 * and so if we receive this message again, we can
 		 * re-check the p2p.route.adv gap time */
 		return 1;
+	}
+
+	return 0;
+}
+
+/**
+ * Process trade.execution.
+ *
+ * @param	trade_execution		trade.execution to be processed.
+ * @param	execution_step		trade.execution's step.
+ * @param	trade			trade.execution related to this trade.
+ * @param	identity		trade.execution sent to this identity.
+ * @param	sender_id		trade.execution from this identifier.
+ * @param	global_state		The global state.
+ *
+ * @return	0			Successfully processed.
+ * @return	1			Failure.
+ */
+static int process_trade_execution(const trade_execution_t *trade_execution,
+				   enum trade_step	   execution_step,
+				   trade_t		   *trade,
+				   identity_t		   *identity,
+				   const unsigned char	   *sender_id,
+				   global_state_t	   *global_state)
+{
+	/* counterparty's identifier must remain the same, unless this is
+	 * the trade acceptance */
+	if (memcmp(trade->cp_identifier, sender_id, PUBLIC_KEY_SIZE)) {
+		if (trade->step != TS_PROPOSAL) {
+			log_debug("process_trade_execution - received "
+				  "trade.execution from a wrong peer");
+			return 0;
+		}
+		memcpy(trade->cp_identifier, sender_id, PUBLIC_KEY_SIZE);
+	}
+	if (memcmp(trade->order->id, trade_execution->order, SHA3_256_SIZE)) {
+		log_debug("process_trade_execution - counterparty's "
+			  "trade.execution refering to a different order");
+		linkedlist_delete_safely(trade->node, trade_clear);
+		return 0;
+	}
+
+	if (trade_update(trade, execution_step, trade_execution->data)) {
+		log_debug("process_trade_execution - received incorrect trade "
+			  "data");
+		linkedlist_delete_safely(trade->node, trade_clear);
+		return 0;
+	}
+
+	trade->step = trade_step_get_next(trade);
+
+	if (trade_step_perform(trade, global_state)) {
+		log_debug("process_trade_execution - performing next step of "
+			  "a trade has failed");
+		linkedlist_delete_safely(trade->node, trade_clear);
+		return 0;
+	}
+
+	return 0;
+}
+
+/**
+ * Process trade.proposal.
+ *
+ * @param	trade_proposal		Trade proposal to be processed.
+ * @param	identity		Process under this identity.
+ * @param	sender_id		trade.proposal from this peer.
+ * @param	global_state		The global state.
+ *
+ * @return	0			Successfully processed.
+ * @return	1			Failure.
+ */
+static int process_trade_proposal(const trade_proposal_t *trade_proposal,
+				  identity_t		 *identity,
+				  const unsigned char	 *sender_id,
+				  global_state_t	 *global_state)
+{
+	order_t *order;
+	trade_t *trade;
+
+	if (!(order = order_find(&global_state->orders,
+				 trade_proposal->order))) {
+		log_debug("process_trade_proposal - received trade proposal "
+			  "for unknown order");
+		return 0;
+	}
+	if (order->flags & ORDER_FOREIGN) {
+		log_debug("process_trade_proposal - received trade proposal "
+			  "for order that does not belong to us");
+		return 0;
+	}
+	if (order->owner.me != identity) {
+		log_debug("process_trade_proposal - received trade proposal "
+			  "for incorrect identity");
+		return 0;
+	}
+
+	if ((trade = trade_find(&global_state->trades,
+				order->id,
+				trade_cmp_order_id))) {
+		/* 2nd proposal from the trading counterparty => abort trade */
+		if (!memcmp(trade->cp_identifier, sender_id, PUBLIC_KEY_SIZE)) {
+			linkedlist_delete_safely(trade->node, trade_clear);
+			order_flags_unset(order, ORDER_TRADING);
+			/* the order is now available again; we don't want to
+			 * accept possible 3rd proposal from the same peer */
+			if (order_blacklist_append(&order->blacklist,
+						   sender_id)) {
+				log_error("Storing sender ID into "
+					  "order blacklist");
+				return 0;
+			}
+
+			log_debug("process_trade_proposal - received 2nd trade "
+				  "proposal from the same peer");
+			return 0;
+		}
+		send_trade_reject(&global_state->routing_table,
+				  identity,
+				  sender_id,
+				  order->id);
+		return 0;
+	}
+	if (order_blacklist_find(&order->blacklist, sender_id)) {
+		log_debug("process_trade_proposal - received trade proposal "
+			  "from a blacklisted peer");
+		return 0;
+	}
+
+	if (!(trade = trade_create(&global_state->trades,
+				   &global_state->identities,
+				   order,
+				   sender_id,
+				   trade_proposal->protocol))) {
+		log_error("Storing a new trade");
+		return 1;
+	}
+
+	trade_update(trade, TS_PROPOSAL, trade_proposal);
+
+	trade->step = trade_step_get_next(trade);
+
+	if (trade_step_perform(trade, global_state)) {
+		log_error("Executing trade step failed");
+		linkedlist_delete_safely(trade->node, trade_clear);
+		return 1;
+	}
+
+	send_market_cancel(&global_state->neighbours, order);
+
+	order_flags_set(order, ORDER_TRADING);
+
+	return 0;
+}
+
+/**
+ * Process trade.reject.
+ *
+ * @param	trade_reject	The trade.reject to process.
+ * @param	my_identity	Process under this identity.
+ * @param	sender_id	Trade reject from this identifier.
+ * @param	trade		trade.reject related to this trade.
+ *
+ * @return	0		Successfully processed.
+ */
+static int process_trade_reject(const trade_reject_t	*trade_reject,
+				const identity_t	*my_identity,
+				const unsigned char	*sender_id,
+				trade_t			*trade)
+{
+	if (trade->step == TS_PROPOSAL &&
+	    trade->my_identity == my_identity &&
+	    !memcmp(trade->cp_identifier, sender_id, PUBLIC_KEY_SIZE)) {
+		order_flags_unset(trade->order, ORDER_TRADING);
+		linkedlist_delete_safely(trade->node, trade_clear);
 	}
 
 	return 0;

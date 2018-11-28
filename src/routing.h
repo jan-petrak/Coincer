@@ -93,6 +93,8 @@ void routing_loop_remove(linkedlist_t		*routing_table,
 void routing_table_remove_next_hop(linkedlist_t	*routing_table,
 				   neighbour_t	*next_hop);
 
+int send_market_cancel(linkedlist_t *neighbours, order_t *order);
+
 int send_p2p_bye(linkedlist_t *neighbours, identity_t *identity);
 int send_p2p_hello(neighbour_t *dest, unsigned short port);
 int send_p2p_peers_adv(neighbour_t *dest, const linkedlist_t *hosts);

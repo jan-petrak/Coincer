@@ -655,6 +655,12 @@ void routing_table_remove_next_hop(linkedlist_t *routing_table,
 	}
 }
 
+int send_market_cancel(linkedlist_t *neighbours, order_t *order)
+{
+	/* TODO: Implement */
+	return 0;
+}
+
 /**
  * Send p2p.bye message.
  *
