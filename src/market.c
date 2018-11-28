@@ -16,30 +16,14 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MARKET_H
-#define MARKET_H
+#include "market.h"
 
-#include "crypto.h"
-#include "linkedlist.h"
-#include "peers.h"
+void order_flags_set(order_t *order, int flags)
+{
+	order->flags |= flags;
+}
 
-/** Order that does not belong to us. */
-#define ORDER_FOREIGN	0x01
-/** Order that is being traded. */
-#define ORDER_TRADING	0x02
-
-typedef struct s_order {
-	unsigned char id[SHA3_256_SIZE];
-	int flags;
-	union owner {
-		peer_t	   *cp;
-		identity_t *me;
-	} owner;
-	linkedlist_t blacklist;
-	linkedlist_node_t *node;
-} order_t;
-
-void order_flags_set(order_t *order, int flags);
-void order_flags_unset(order_t *order, int flags);
-
-#endif /* MARKET_H */
+void order_flags_unset(order_t *order, int flags)
+{
+	order->flags &= ~flags;
+}

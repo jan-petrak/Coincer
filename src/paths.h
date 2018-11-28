@@ -23,6 +23,9 @@
 typedef struct s_filepaths {
 	char *config_dir; /**< Config directory. */
 	char *data_dir; /**< Data directory. */
+	char *trades_dir; /**< Directory with trades. */
+	/** Trades' subdirectory with trades of type 'basic'. */
+	char *trades_basic_dir;
 
 	/**< Path to file with addresses of hosts. */
 	char *hosts;

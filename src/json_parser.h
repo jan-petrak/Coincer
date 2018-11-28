@@ -44,7 +44,11 @@ int decode_message_data(const char		*json_data,
 			const enum message_type	type,
 			void			**data);
 
+int decode_trade(const char *json_trade, trade_t **trade);
+
 int encode_message(const message_t *message, char **json_message);
 int encode_message_body(const message_body_t *body, char **json_body);
+
+int encode_trade(const trade_t *trade, char **json_trade);
 
 #endif /* JSON_PARSER_H */

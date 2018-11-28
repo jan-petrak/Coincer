@@ -619,9 +619,8 @@ void routing_loop_remove(linkedlist_t		*routing_table,
 		next_hop = route_next_hop_get(route);
 		if (!next_hop) {
 			/* create a temporary identity for the p2p.route.sol */
-			identity = identity_generate(IDENTITY_TMP);
-			/* if appending succeeded */
-			if (linkedlist_append(identities, identity)) {
+			if ((identity = identity_generate(identities,
+							  IDENTITY_TMP))) {
 				/* if successfully sent */
 				if (!send_p2p_route_sol(neighbours,
 						        identity,
@@ -629,7 +628,6 @@ void routing_loop_remove(linkedlist_t		*routing_table,
 					return;
 				}
 			}
-			free(identity);
 			route_delete(routing_table, dest_id);
 		}
 	}

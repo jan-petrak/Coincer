@@ -20,14 +20,194 @@
 #include <string.h>
 
 #include "crypto.h"
+#include "global_state.h"
+#include "linkedlist.h"
+#include "log.h"
+#include "market.h"
+#include "paths.h"
+#include "peers.h"
 #include "trade.h"
 #include "trade_basic.h"
 
 /**
- * Delete trade.execution message.
+ * Cancel a trade.
  *
- * @param	trade_execution		The message.
- * @param	type			Trading type of the trade.execution.
+ * @param	trade	Trade to be cancelled.
+ */
+void trade_cancel(trade_t *trade)
+{
+	switch (trade->type) {
+		case TT_BASIC:
+			trade_basic_cancel(trade);
+			break;
+	}
+
+	order_flags_unset(trade->order, ORDER_TRADING);
+
+	linkedlist_delete_safely(trade->node, trade_clear);
+}
+
+/**
+ * Clear trade's data.
+ *
+ * @param	trade	Trade to be cleared.
+ */
+void trade_clear(trade_t *trade)
+{
+	switch (trade->type) {
+		case TT_BASIC:
+			trade_basic_clear(trade->data);
+			break;
+	}
+
+	if (trade->my_identity) {
+		linkedlist_delete(trade->my_identity->node);
+	}
+}
+
+/**
+ * Compare our trading identity to other identity.
+ *
+ * @param	trade		Trade with our trading identity.
+ * @param	identity	Compare to this identity.
+ *
+ * @return	0		The identities match.
+ * @return	1		The identities are different.
+ */
+int trade_cmp_identity(const trade_t *trade, const identity_t *identity)
+{
+	return trade->my_identity != identity;
+}
+
+/**
+ * Compare order ID of a trade to other order ID.
+ *
+ * @param	trade		Order ID of this trade.
+ * @param	order_id	Compare to this order ID.
+ *
+ * @return	0		The IDs match.
+ * @return	1		The IDs are different.
+ */
+int trade_cmp_order_id(const trade_t *trade, const unsigned char *order_id)
+{
+	return memcmp(trade->order->id, order_id, SHA3_256_SIZE);
+}
+
+/**
+ * Create and store a new trade including a newly generated identity.
+ *
+ * @param	trades		List of our trades.
+ * @param	identities	List of our identities.
+ * @param	order		Trade related to this order.
+ * @param	cp_id		Counterparty's identifier.
+ * @param	type		Type of the trade.
+ *
+ * @return	trade_t		Trade successfully created.
+ * @return	NULL		Failure.
+ */
+trade_t *trade_create(linkedlist_t	  *trades,
+		      linkedlist_t	  *identities,
+		      order_t		  *order,
+		      const unsigned char *cp_id,
+		      enum trade_type	  type)
+{
+	trade_t *trade;
+
+	trade = (trade_t *) malloc(sizeof(trade_t));
+	if (!trade) {
+		log_error("Creating a trade");
+		return NULL;
+	}
+	if (!(trade->node = linkedlist_append(trades, trade))) {
+		free(trade);
+		log_error("Storing a new trade");
+		return NULL;
+	}
+	if (!(trade->my_identity = identity_generate(identities, 0x0))) {
+		linkedlist_delete(trade->node);
+		log_error("Creating trade-specific identity");
+		return NULL;
+	}
+
+	switch (type) {
+		case TT_BASIC:
+			if (!(trade->data = malloc(sizeof(trade_basic_t)))) {
+				linkedlist_delete_safely(trade->node,
+							 trade_clear);
+				log_error("Creating trade data");
+				return NULL;
+			}
+			trade_basic_init_data(trade->data);
+			break;
+	}
+
+	trade->order = order;
+	trade->type  = type;
+	trade->step  = TS_PROPOSAL;
+	memset(&trade->my_keypair, 0x0, sizeof(keypair_t));
+	memcpy(trade->cp_identifier, cp_id, PUBLIC_KEY_SIZE);
+	memset(trade->cp_pubkey, 0x0, PUBLIC_KEY_SIZE);
+
+	return trade;
+}
+
+/**
+ * Find a trade by one of its attributes.
+ *
+ * @param	trades		List of our trades.
+ * @param	attribute	Find by this attribute.
+ * @param	cmp_func	Comparing function. Returns 0 for a match.
+ *
+ * @return	trade_t		The trade we want.
+ * @return	NULL		Trade unknown.
+ */
+trade_t *trade_find(const linkedlist_t	*trades,
+		    const void		*attribute,
+		    int (*cmp_func) (const trade_t	*trade,
+				    const void		*attribute))
+{
+	const linkedlist_node_t *node;
+	trade_t			*trade;
+
+	node = linkedlist_get_first(trades);
+	while (node) {
+		trade = (trade_t *) node->data;
+
+		if (!cmp_func(trade, attribute)) {
+			return trade;
+		}
+
+		node = linkedlist_get_next(trades, node);
+	}
+
+	return NULL;
+}
+
+/**
+ * Update trade's data with the next trading step.
+ *
+ * @param	trade		Trade to be updated.
+ * @param	next_step	Next step of a trade.
+ * @param	data		Next step's data.
+ *
+ * @return	0		Successfully updated.
+ * @return	1		Incorrect data.
+ */
+int trade_update(trade_t *trade, enum trade_step next_step, const void *data)
+{
+	switch (trade->type) {
+		case TT_BASIC:
+			return trade_basic_update(trade, next_step, data);
+	}
+
+	return 1;
+}
+
+/**
+ * Delete trade.execution payload.
+ *
+ * @param	trade_execution		The payload to be deleted.
+ * @param	type			Type of execution's trade.
  * @param	step			trade.execution's step.
  */
 void trade_execution_delete(trade_execution_t	*trade_execution,
@@ -60,4 +240,50 @@ void trade_proposal_init(trade_proposal_t *trade_proposal, const trade_t *trade)
 		case TT_BASIC:
 			trade_proposal_basic_init(trade_proposal, trade->data);
 	}
+}
+
+/**
+ * Get the next step of a trade.
+ *
+ * @param	trade		The next step of this trade.
+ *
+ * @return	trade_step	The next step.
+ */
+enum trade_step trade_step_get_next(const trade_t *trade)
+{
+	switch (trade->type) {
+		case TT_BASIC:
+			return trade_step_basic_get_next(trade);
+	}
+}
+
+/**
+ * Perform the current step of a trade.
+ *
+ * @param	trade		Use this trade.
+ * @param	global_state	The global state.
+ *
+ * @return	0		Success.
+ * @return	1		Failure.
+ */
+int trade_step_perform(trade_t *trade, global_state_t *global_state)
+{
+	switch (trade->type) {
+		case TT_BASIC:
+			return trade_step_basic_perform(trade, global_state);
+	}
+}
+
+/**
+ * Load saved trades into memory.
+ *
+ * @param	trades		Store loaded trades in here.
+ * @param	paths		Paths to trade directories.
+ *
+ * @return	0		Successfully loaded.
+ * @return	1		Failure.
+ */
+int trades_load(linkedlist_t *trades, filepaths_t *paths)
+{
+	return trades_basic_load(trades, paths->trades_basic_dir);
 }

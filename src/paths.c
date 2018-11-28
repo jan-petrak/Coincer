@@ -24,6 +24,9 @@
 #include "log.h"
 #include "paths.h"
 
+#define TRADES_DIR_NAME		"trades"
+#define TRADES_BASIC_DIR_NAME	"basic"
+
 #define HOSTS_FILE_NAME "hosts"
 
 static int set_dir_path(const char *location,
@@ -166,7 +169,13 @@ static int set_dir_path(const char *location,
 int setup_paths(filepaths_t *filepaths)
 {
 	if (set_config_dir_path(&filepaths->config_dir) ||
-	    set_data_dir_path(&filepaths->data_dir)) {
+	    set_data_dir_path(&filepaths->data_dir) ||
+	    set_dir_path(filepaths->data_dir,
+			 TRADES_DIR_NAME,
+			 &filepaths->trades_dir) ||
+	    set_dir_path(filepaths->trades_dir,
+			 TRADES_BASIC_DIR_NAME,
+			 &filepaths->trades_basic_dir)) {
 		log_error("Setting directory paths failed");
 		return 1;
 	}
@@ -187,6 +196,8 @@ void clear_paths(filepaths_t *filepaths)
 {
 	free(filepaths->config_dir);
 	free(filepaths->data_dir);
+	free(filepaths->trades_dir);
+	free(filepaths->trades_basic_dir);
 
 	free(filepaths->hosts);
 }

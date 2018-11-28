@@ -20,8 +20,10 @@
 #define TRADE_H
 
 #include "crypto.h"
+#include "global_state.h"
 #include "linkedlist.h"
 #include "market.h"
+#include "paths.h"
 #include "peers.h"
 
 /**
@@ -43,8 +45,8 @@ enum trade_step {
 	TS_COINS_COMMITMENT, /**< Committing coins into a blackchain. */
 	/** Waiting for the counterparty to commit their coins. */
 	TS_COINS_CP_COMMITMENT,
-	TS_COINS_CLAIM, /** Coins claim. */
-	TS_DONE /** Trade successfully completed. */
+	TS_COINS_CLAIM, /**< Coins claim. */
+	TS_DONE /**< Trade successfully completed. */
 };
 
 /**
@@ -94,11 +96,31 @@ typedef struct s_trade_reject {
 	unsigned char order[SHA3_256_SIZE]; /**< Order id. */
 } trade_reject_t;
 
+void trade_cancel(trade_t *trade);
+void trade_clear(trade_t *trade);
+int trade_cmp_identity(const trade_t *trade, const identity_t *identity);
+int trade_cmp_order_id(const trade_t *trade, const unsigned char *order_id);
+trade_t *trade_create(linkedlist_t	  *trades,
+		      linkedlist_t	  *identities,
+		      order_t		  *order,
+		      const unsigned char *cp_id,
+		      enum trade_type	  type);
+trade_t *trade_find(const linkedlist_t	*trades,
+		    const void		*attribute,
+		    int (*cmp_func) (const trade_t	*trade,
+				    const void		*attribute));
+int trade_update(trade_t *trade, enum trade_step next_step, const void *data);
+
 void trade_execution_delete(trade_execution_t	*data,
 			    enum trade_type	type,
 			    enum trade_step	step);
 
 void trade_proposal_init(trade_proposal_t	*trade_proposal,
 			 const trade_t		*trade);
+
+enum trade_step trade_step_get_next(const trade_t *trade);
+int trade_step_perform(trade_t *trade, global_state_t *global_state);
+
+int trades_load(linkedlist_t *trades, filepaths_t *paths);
 
 #endif /* TRADE_H */

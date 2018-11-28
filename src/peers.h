@@ -62,6 +62,8 @@ typedef struct s_identity {
 	time_t last_adv;
 	/** The last used nonce with this identity. */
 	uint64_t nonce_value;
+	/** The identity's node in the list of identities. */
+	linkedlist_node_t *node;
 } identity_t;
 
 int identifier_empty(const unsigned char id[PUBLIC_KEY_SIZE]);
@@ -70,7 +72,7 @@ identity_t *identity_find(const linkedlist_t	*identities,
 			  const unsigned char	*identifier);
 void identity_flags_set(identity_t *identity, int flags);
 void identity_flags_unset(identity_t *identity, int flags);
-identity_t *identity_generate(int flags);
+identity_t *identity_generate(linkedlist_t *identities, int flags);
 
 int nonce_is_stale(const nonce_t *nonce, const time_t current_time);
 int nonce_store(linkedlist_t *nonces, uint64_t value);

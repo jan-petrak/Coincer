@@ -14,7 +14,7 @@ src_coincerd_SOURCES = \
 	src/json_parser.c src/json_parser.h \
 	src/linkedlist.c src/linkedlist.h \
 	src/log.c src/log.h \
-	src/market.h \
+	src/market.c src/market.h \
 	src/neighbours.c src/neighbours.h \
 	src/p2p.c src/p2p.h \
 	src/paths.c src/paths.h \

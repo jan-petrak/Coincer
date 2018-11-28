@@ -71,7 +71,9 @@ static int create_dir(const char *dir_path, mode_t mode)
 int create_dirs(const filepaths_t *paths)
 {
 	if (create_dir(paths->config_dir, S_IRWXU) ||
-	    create_dir(paths->data_dir, S_IRWXU)) {
+	    create_dir(paths->data_dir, S_IRWXU) ||
+	    create_dir(paths->trades_dir, S_IRWXU) ||
+	    create_dir(paths->trades_basic_dir, S_IRWXU)) {
 		log_error("Creating directories");
 		return 1;
 	}

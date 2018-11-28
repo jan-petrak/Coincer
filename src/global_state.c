@@ -69,13 +69,12 @@ int global_state_init(global_state_t *global_state)
 	}
 
 	linkedlist_init(&global_state->identities);
-	if (!(global_state->true_identity = identity_generate(0x00))) {
+	if (!(global_state->true_identity = identity_generate(
+						&global_state->identities,
+						0x00))) {
 		log_error("Creating our true identity");
 		return 1;
 	}
-	linkedlist_append(&global_state->identities,
-			  global_state->true_identity);
-
 	linkedlist_init(&global_state->events);
 	linkedlist_init(&global_state->hosts);
 	linkedlist_init(&global_state->message_traces);

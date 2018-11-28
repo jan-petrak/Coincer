@@ -97,20 +97,27 @@ void identity_flags_unset(identity_t *identity, int flags)
 }
 
 /**
- * Generate an identity, including its initial nonce value.
+ * Generate an identity, including its initial nonce value and append it to the
+ * list of our identities.
  *
+ * @param	identities	List of our identities.
  * @param	flags		The flags of the identity.
  *
  * @return	identity_t	Dynamically allocated identity.
  * @return	NULL		Allocation failure.
  */
-identity_t *identity_generate(int flags)
+identity_t *identity_generate(linkedlist_t *identities, int flags)
 {
 	identity_t *identity;
 
 	identity = (identity_t *) malloc(sizeof(identity_t));
 	if (!identity) {
 		log_error("Creating a new identity");
+		return NULL;
+	}
+	if (!(identity->node = linkedlist_append(identities, identity))) {
+		free(identity);
+		log_error("Storing a new identity");
 		return NULL;
 	}
 

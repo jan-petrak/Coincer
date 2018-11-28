@@ -23,7 +23,8 @@
 #include "daemon_messages.h"
 #include "json_parser.h"
 #include "log.h"
-
+#include "trade.h"
+#include "trade_basic.h"
 
 /* TODO: Implement */
 /**
@@ -181,6 +182,22 @@ int decode_message_data(const char		*json_data,
 
 /* TODO: Implement */
 /**
+ * Decode a JSON trade.
+ *
+ * @param	json_trade	Encoded JSON trade.
+ * @param	trade		Internal trade representation, dynamically
+ *				allocated in here.
+ *
+ * @return	0		Successfully decoded.
+ * @return	1		Failure.
+ */
+int decode_trade(const char *json_trade, trade_t **trade)
+{
+	return 0;
+}
+
+/* TODO: Implement */
+/**
  * Encode a daemon message into JSON format output.
  *
  * @param	message		Message to be encoded.
@@ -239,6 +256,21 @@ int encode_message(const message_t *message, char **json_message)
  * @return	1		Failure.
  */
 int encode_message_body(const message_body_t *body, char **json_body)
+{
+	return 0;
+}
+
+/* TODO: Implement */
+/**
+ * Encode a trade into JSON.
+ *
+ * @param	trade		Trade to encode.
+ * @param	json_trade	Encoded JSON trade.
+ *
+ * @return	0		Successfully encoded.
+ * @return	1		Failure.
+ */
+int encode_trade(const trade_t *trade, char **json_trade)
 {
 	return 0;
 }
