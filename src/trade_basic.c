@@ -336,14 +336,13 @@ static int trade_script_generate(trade_t *trade, global_state_t *global_state)
 static int trade_script_originator(const trade_t *trade)
 {
 	char		cp_committed_hex[COMMITTED_HEX_LEN + 1];
-	unsigned char	cp_hash[SHA3_256_SIZE];
-	unsigned char	cp_buff[ORDER_ID_HEX_LEN + COMMITTED_HEX_LEN];
-
 	char		my_committed_hex[COMMITTED_HEX_LEN + 1];
-	unsigned char	my_hash[SHA3_256_SIZE];
-	unsigned char	my_buff[ORDER_ID_HEX_LEN + COMMITTED_HEX_LEN];
+	char		order_id_hex[ORDER_ID_HEX_LEN + 1];
 
-	char order_id_hex[ORDER_ID_HEX_LEN + 1];
+	unsigned char	cp_hash[SHA3_256_SIZE];
+	unsigned char	my_hash[SHA3_256_SIZE];
+
+	unsigned char	buf[ORDER_ID_HEX_LEN + 2 * COMMITTED_HEX_LEN];
 
 	trade_basic_t *data = (trade_basic_t *) trade->data;
 
@@ -361,19 +360,25 @@ static int trade_script_originator(const trade_t *trade)
 		       data->my_committed,
 		       TRADE_BASIC_COMMITTED_SIZE);
 
-	memcpy(cp_buff, order_id_hex, ORDER_ID_HEX_LEN);
-	memcpy(cp_buff + ORDER_ID_HEX_LEN,
+	memcpy(buf, order_id_hex, ORDER_ID_HEX_LEN);
+	memcpy(buf + ORDER_ID_HEX_LEN,
 	       cp_committed_hex,
-	       TRADE_BASIC_COMMITTED_SIZE);
-
-	hash_message(HT_SHA3_256, cp_buff, sizeof(cp_buff), cp_hash);
-
-	memcpy(my_buff, order_id_hex, ORDER_ID_HEX_LEN);
-	memcpy(my_buff + ORDER_ID_HEX_LEN,
+	       COMMITTED_HEX_LEN);
+	memcpy(buf + ORDER_ID_HEX_LEN + COMMITTED_HEX_LEN,
 	       my_committed_hex,
-	       TRADE_BASIC_COMMITTED_SIZE);
+	       COMMITTED_HEX_LEN);
 
-	hash_message(HT_SHA3_256, my_buff, sizeof(my_buff), my_hash);
+	hash_message(HT_SHA3_256, buf, sizeof(buf), cp_hash);
+
+	memcpy(buf, order_id_hex, ORDER_ID_HEX_LEN);
+	memcpy(buf + ORDER_ID_HEX_LEN,
+	       my_committed_hex,
+	       COMMITTED_HEX_LEN);
+	memcpy(buf + ORDER_ID_HEX_LEN + COMMITTED_HEX_LEN,
+	       cp_committed_hex,
+	       COMMITTED_HEX_LEN);
+
+	hash_message(HT_SHA3_256, buf, sizeof(buf), my_hash);
 
 	return memcmp(my_hash, cp_hash, SHA3_256_SIZE) > 0;
 }
