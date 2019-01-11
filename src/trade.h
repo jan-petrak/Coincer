@@ -42,7 +42,7 @@ enum trade_step {
 	TS_KEY_AND_COMMITTED_EXCHANGE, /**< Pubkey and 'committed' exchange. */
 	TS_SCRIPT_ORIGIN, /**< Received or sent the first script. */
 	TS_SCRIPT_RESPONSE, /**< Received or sent the second script. */
-	TS_COINS_COMMITMENT, /**< Committing coins into a blackchain. */
+	TS_COINS_COMMITMENT, /**< Committing coins into a blockchain. */
 	/** Waiting for the counterparty to commit their coins. */
 	TS_COINS_CP_COMMITMENT,
 	TS_COINS_CLAIM, /**< Coins claim. */
@@ -53,7 +53,7 @@ enum trade_step {
  * Trade data holder.
  */
 typedef struct s_trade {
-	order_t *order; /**< Trade refering to this order. */
+	order_t *order; /**< Trade referring to this order. */
 
 	enum trade_type type; /**< Type of the trade. */
 	enum trade_step step; /**< Current step of the trade. */

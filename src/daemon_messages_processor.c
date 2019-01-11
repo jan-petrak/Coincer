@@ -485,6 +485,7 @@ static int process_encrypted(const encrypted_t	 *encrypted_payload,
 	}
 
 	free(json_payload);
+	json_payload = NULL;
 
 	/* trade.execution has its own parsing function */
 	if (payload_type != TRADE_EXECUTION) {
@@ -510,7 +511,7 @@ static int process_encrypted(const encrypted_t	 *encrypted_payload,
 			}
 			trade_type = trade->type;
 			next_step  = trade_step_get_next(trade);
-			/* attept to decode the next step of the agreed
+			/* attempt to decode the next step of the agreed
 			 * trading protocol */
 			if (decode_trade_execution(json_payload_data,
 						   trade_type,
@@ -573,6 +574,7 @@ static int process_encrypted(const encrypted_t	 *encrypted_payload,
  * @param	global_state	The global state.
  *
  * @return	0		Successfully processed.
+ * @return	1		Failure.
  */
 static int process_p2p_bye(const message_t	*message,
 			   const char		*json_message,
@@ -656,6 +658,7 @@ static int process_p2p_hello(const message_t	*message,
  * @param	hosts		Our known hosts.
  *
  * @return	0		Successfully processed.
+ * @return	1		Failure.
  */
 static int process_p2p_peers_adv(const message_t *message,
 				 neighbour_t	 *sender,
@@ -1010,8 +1013,6 @@ static int process_trade_proposal(const trade_proposal_t *trade_proposal,
 		return 1;
 	}
 
-	send_market_cancel(&global_state->neighbours, order);
-
 	order_flags_set(order, ORDER_TRADING);
 
 	return 0;
@@ -1026,6 +1027,7 @@ static int process_trade_proposal(const trade_proposal_t *trade_proposal,
  * @param	trade		trade.reject related to this trade.
  *
  * @return	0		Successfully processed.
+ * @return	1		Failure.
  */
 static int process_trade_reject(const trade_reject_t	*trade_reject,
 				const identity_t	*my_identity,

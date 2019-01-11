@@ -69,9 +69,11 @@ void trade_basic_clear(trade_basic_t *data)
 {
 	if (data->my_script) {
 		free(data->my_script);
+		data->my_script = NULL;
 	}
 	if (data->cp_script) {
 		free(data->cp_script);
+		data->cp_script = NULL;
 	}
 }
 
@@ -238,7 +240,9 @@ int trade_basic_update(trade_t		*trade,
 				if (trade_script_validate(trade,
 							  execution->script)) {
 					log_error("Counterparty's script "
-						  "is invalid");
+						  "is invalid [step "
+						  "TS_KEY_AND_"
+						  "COMMITTED_EXCHANGE");
 					return 1;
 				}
 				trade_data->cp_script = execution->script;
@@ -251,7 +255,8 @@ int trade_basic_update(trade_t		*trade,
 			break;
 		case TS_SCRIPT_ORIGIN:
 			if (trade_script_validate(trade, execution->script)) {
-				log_error("Counterparty's script is invalid");
+				log_error("Counterparty's script is invalid "
+					  "[step TS_SCRIPT_ORIGIN]");
 				return 1;
 			}
 			trade_data->cp_script = execution->script;
@@ -261,7 +266,8 @@ int trade_basic_update(trade_t		*trade,
 			break;
 		case TS_SCRIPT_RESPONSE:
 			if (trade_script_validate(trade, execution->script)) {
-				log_error("Counterparty's script is invalid");
+				log_error("Counterparty's script is invalid "
+					  "[step TS_SCRIPT_RESPONSE]");
 				return 1;
 			}
 			trade_data->cp_script = execution->script;
@@ -463,7 +469,8 @@ int trade_step_basic_perform(trade_t *trade, global_state_t *global_state)
 
 			if (send_trade_execution(&global_state->routing_table,
 						 trade)) {
-				log_error("Sending trade.execution");
+				log_error("Sending trade.execution "
+					  "[step TS_COMMITMENT]");
 				return 1;
 			}
 			break;
@@ -473,14 +480,18 @@ int trade_step_basic_perform(trade_t *trade, global_state_t *global_state)
 			    !trade_script_originator(trade)) {
 				if (trade_script_generate(trade,
 							  global_state)) {
-					log_error("Creating a trade script");
+					log_error("Creating a trade script "
+						  "[step TS_KEY_AND_"
+						  "COMMITTED_EXCHANGE");
 					return 1;
 				}
 			}
 
 			if (send_trade_execution(&global_state->routing_table,
 						 trade)) {
-				log_error("Sending trade.execution");
+				log_error("Sending trade.execution "
+					  "[step TS_KEY_AND_"
+					  "COMMITTED_EXCHANGE]");
 				return 1;
 			}
 			break;
@@ -495,25 +506,29 @@ int trade_step_basic_perform(trade_t *trade, global_state_t *global_state)
 				     SHA3_256_SIZE,
 				     trade_data->hx);
 			if (trade_script_generate(trade, global_state)) {
-				log_error("Creating a trade script");
+				log_error("Creating a trade script "
+					  "[step TS_SCRIPT_ORIGIN]");
 				return 1;
 			}
 
 			if (send_trade_execution(&global_state->routing_table,
 						 trade)) {
-				log_error("Sending trade.execution");
+				log_error("Sending trade.execution "
+					  "[step TS_SCRIPT_ORIGIN]");
 				return 1;
 			}
 			break;
 		case TS_SCRIPT_RESPONSE:
 			if (trade_script_generate(trade, global_state)) {
-				log_error("Creating a trade script");
+				log_error("Creating a trade script "
+					  "[step TS_SCRIPT_RESPONSE]");
 				return 1;
 			}
 
 			if (send_trade_execution(&global_state->routing_table,
 						 trade)) {
-				log_error("Sending trade.execution");
+				log_error("Sending trade.execution "
+					  "[step TS_SCRIPT_RESPONSE]");
 				return 1;
 			}
 			break;
@@ -522,7 +537,13 @@ int trade_step_basic_perform(trade_t *trade, global_state_t *global_state)
 				log_error("Saving a trade");
 				return 1;
 			}
+
 			/* TODO: Commit coins */
+
+			if (!(trade->order->flags & ORDER_FOREIGN)) {
+				send_market_cancel(&global_state->neighbours,
+						   trade->order);
+			}
 			break;
 	}
 

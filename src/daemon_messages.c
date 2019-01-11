@@ -31,7 +31,7 @@ static int create_trade_execution_basic(trade_execution_basic_t **basic,
 					const trade_t		*trade);
 
 /**
- * Create encrypted and store it in a message.
+ * Create encrypted container and store it in a message.
  *
  * @param	message			Store encrypted in this message.
  * @param	encrypted_payload	Encrypted data.
@@ -49,7 +49,8 @@ int create_encrypted(message_t *message, const char *encrypted_payload)
 		log_error("Creating encrypted");
 		return 1;
 	}
-	payload = (char *) malloc(strlen(encrypted_payload + 1) * sizeof(char));
+	payload = (char *) malloc((strlen(encrypted_payload) + 1) *
+				  sizeof(char));
 	if (!payload) {
 		log_error("Creating encrypted payload");
 		free(encrypted);
@@ -264,7 +265,7 @@ int create_trade_execution(trade_execution_t **execution, const trade_t *trade)
 	}
 
 	if (ret) {
-		free(execution);
+		free(*execution);
 	}
 
 	return ret;
@@ -296,8 +297,6 @@ static int create_trade_execution_basic(trade_execution_basic_t **basic,
 		return 1;
 	}
 
-	*basic = exec_data;
-
 	switch (trade->step) {
 		case TS_COMMITMENT:
 			memcpy(exec_data->commitment,
@@ -320,6 +319,7 @@ static int create_trade_execution_basic(trade_execution_basic_t **basic,
 					sizeof(char));
 			if (!script) {
 				log_error("Script for trade.execution message");
+				free(exec_data);
 				return 1;
 			}
 			strcpy(script, trade_data->my_script);
@@ -333,6 +333,7 @@ static int create_trade_execution_basic(trade_execution_basic_t **basic,
 					sizeof(char));
 			if (!script) {
 				log_error("Script for trade.execution message");
+				free(exec_data);
 				return 1;
 			}
 			strcpy(script, trade_data->my_script);
@@ -341,8 +342,11 @@ static int create_trade_execution_basic(trade_execution_basic_t **basic,
 		default:
 			log_error("Non-existent step for trade.execution "
 				  "creation");
+			free(exec_data);
 			return 1;
 	}
+
+	*basic = exec_data;
 
 	return 0;
 }
