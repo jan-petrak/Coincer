@@ -109,11 +109,17 @@ trade_t *trade_find(const linkedlist_t	*trades,
 		    const void		*attribute,
 		    int (*cmp_func) (const trade_t	*trade,
 				    const void		*attribute));
-int trade_update(trade_t *trade, enum trade_step next_step, const void *data);
+int trade_update(trade_t		*trade,
+		 enum trade_step	next_step,
+		 const void		*data,
+		 const unsigned char	*sender_id);
 
 void trade_execution_delete(trade_execution_t	*data,
 			    enum trade_type	type,
 			    enum trade_step	step);
+int trade_execution_verify(const trade_execution_t	*execution,
+			   const trade_t		*trade,
+			   const unsigned char		*sender_id);
 
 void trade_proposal_init(trade_proposal_t	*trade_proposal,
 			 const trade_t		*trade);

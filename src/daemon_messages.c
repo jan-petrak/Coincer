@@ -284,9 +284,10 @@ int create_trade_execution(trade_execution_t **execution, const trade_t *trade)
 static int create_trade_execution_basic(trade_execution_basic_t **basic,
 					const trade_t		*trade)
 {
-	trade_execution_basic_t *exec_data;
-	char *script;
-	trade_basic_t *trade_data;
+	trade_execution_basic_t	*exec_data;
+	char			new_id_hex[2 * PUBLIC_KEY_SIZE + 1];
+	char			*script;
+	trade_basic_t		*trade_data;
 
 	trade_data = (trade_basic_t *) trade->data;
 
@@ -302,6 +303,14 @@ static int create_trade_execution_basic(trade_execution_basic_t **basic,
 			memcpy(exec_data->commitment,
 			       trade_data->my_commitment,
 			       SHA3_256_SIZE);
+
+			sodium_bin2hex(new_id_hex,
+				       sizeof(new_id_hex),
+				       trade->my_identity->keypair.public_key,
+				       PUBLIC_KEY_SIZE);
+			sign_message(new_id_hex,
+				     trade->order->owner.me->keypair.secret_key,
+				     exec_data->idsig);
 			break;
 		case TS_KEY_AND_COMMITTED_EXCHANGE:
 			memcpy(exec_data->pubkey,

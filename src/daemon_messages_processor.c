@@ -890,24 +890,22 @@ static int process_trade_execution(const trade_execution_t *trade_execution,
 				   const unsigned char	   *sender_id,
 				   global_state_t	   *global_state)
 {
-	/* counterparty's identifier must remain the same, unless this is
-	 * the trade acceptance */
-	if (memcmp(trade->cp_identifier, sender_id, PUBLIC_KEY_SIZE)) {
-		if (trade->step != TS_PROPOSAL) {
-			log_debug("process_trade_execution - received "
-				  "trade.execution from a wrong peer");
-			return 0;
+	int ret;
+
+	if ((ret = trade_execution_verify(trade_execution, trade, sender_id))) {
+		log_debug("process_trade_execution - received incorrect "
+			  "trade.execution");
+		/* if the trade should be aborted */
+		if (ret == 1) {
+			linkedlist_delete_safely(trade->node, trade_clear);
 		}
-		memcpy(trade->cp_identifier, sender_id, PUBLIC_KEY_SIZE);
-	}
-	if (memcmp(trade->order->id, trade_execution->order, SHA3_256_SIZE)) {
-		log_debug("process_trade_execution - counterparty's "
-			  "trade.execution refering to a different order");
-		linkedlist_delete_safely(trade->node, trade_clear);
 		return 0;
 	}
 
-	if (trade_update(trade, execution_step, trade_execution->data)) {
+	if (trade_update(trade,
+			 execution_step,
+			 trade_execution->data,
+			 sender_id)) {
 		log_debug("process_trade_execution - received incorrect trade "
 			  "data");
 		linkedlist_delete_safely(trade->node, trade_clear);
@@ -1003,7 +1001,7 @@ static int process_trade_proposal(const trade_proposal_t *trade_proposal,
 		return 1;
 	}
 
-	trade_update(trade, TS_PROPOSAL, trade_proposal);
+	trade_update(trade, TS_PROPOSAL, trade_proposal, sender_id);
 
 	trade->step = trade_step_get_next(trade);
 

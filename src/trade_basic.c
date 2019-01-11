@@ -185,13 +185,15 @@ static int trade_basic_save(const trade_t *trade, const char *trades_dir)
  * @param	trade		The trade.
  * @param	next_step	Next step of a trade.
  * @param	data		The next step's data.
+ * @param	sender_id	The data received from this id.
  *
  * @return	0		Successfully updated.
  * @return	1		Incorrect input data.
  */
-int trade_basic_update(trade_t		*trade,
-		       enum trade_step	next_step,
-		       const void	*data)
+int trade_basic_update(trade_t		   *trade,
+		       enum trade_step	   next_step,
+		       const void	   *data,
+		       const unsigned char *sender_id)
 {
 	enum trade_step		cur_step;
 	trade_execution_basic_t *execution;
@@ -217,6 +219,9 @@ int trade_basic_update(trade_t		*trade,
 			memcpy(trade_data->cp_commitment,
 			       execution->commitment,
 			       SHA3_256_SIZE);
+			memcpy(trade->cp_identifier,
+			       sender_id,
+			       PUBLIC_KEY_SIZE);
 			break;
 		case TS_KEY_AND_COMMITTED_EXCHANGE:
 			memcpy(trade->cp_pubkey,
@@ -292,8 +297,62 @@ void trade_execution_basic_delete(trade_execution_basic_t *execution,
 	    step == TS_KEY_AND_COMMITTED_EXCHANGE) {
 		if (execution->script) {
 			free(execution->script);
+			execution->script = NULL;
 		}
 	}
+}
+
+/**
+ * Verify trade.execution of a basic trade.
+ *
+ * @param	execution	trade.execution to be verified.
+ * @param	trade		trade.execution for this trade.
+ * @param	sender_id	trade.execution received from this id.
+ *
+ * @return	0		trade.execution is legit.
+ * @return	1		trade.execution is not legit and the trade
+ *				should be aborted.
+ * @return	2		trade.execution is not legit but the trade
+ *				does not need to be aborted.
+ */
+int trade_execution_basic_verify(const trade_execution_t *execution,
+				 const trade_t		 *trade,
+				 const unsigned char	 *sender_id)
+{
+	const trade_execution_basic_t *exec_data;
+	char			      new_id_hex[2 * PUBLIC_KEY_SIZE + 1];
+
+	exec_data = (trade_execution_basic_t *) execution->data;
+
+	/* counterparty's identifier must remain the same, unless this is
+	 * the trade acceptance */
+	if (memcmp(trade->cp_identifier, sender_id, PUBLIC_KEY_SIZE)) {
+		if (trade->step != TS_PROPOSAL) {
+			log_debug("trade_execution_basic_verify - received "
+				  "trade.execution from a wrong peer");
+			return 1;
+		}
+		sodium_bin2hex(new_id_hex,
+			       sizeof(new_id_hex),
+			       sender_id,
+			       PUBLIC_KEY_SIZE);
+		if (verify_signature(new_id_hex,
+				     trade->cp_identifier,
+				     exec_data->idsig)) {
+			log_debug("trade_execution_basic_verify - received "
+				  "trade.execution from a wrong peer");
+			/* possible MITM attempt */
+			return 2;
+		}
+	}
+
+	if (memcmp(trade->order->id, execution->order, SHA3_256_SIZE)) {
+		log_debug("trade_execution_basic_verify - counterparty's "
+			  "trade.execution referring to a different order");
+		return 1;
+	}
+
+	return 0;
 }
 
 /**

@@ -55,6 +55,9 @@ typedef struct s_trade_execution_basic {
 	unsigned char committed[TRADE_BASIC_COMMITTED_SIZE];
 	/** Double hash of the secret 'x' from the first trading script. */
 	unsigned char hx[RIPEMD_160_SIZE];
+	/** Signature of the trade identifier, signed by the order's
+	 *  identity. */
+	unsigned char idsig[SIGNATURE_SIZE];
 	/** Trading public key. */
 	unsigned char pubkey[PUBLIC_KEY_SIZE];
 	/** Trading script. */
@@ -64,12 +67,16 @@ typedef struct s_trade_execution_basic {
 void trade_basic_cancel(trade_t *trade);
 void trade_basic_clear(trade_basic_t *data);
 void trade_basic_init_data(trade_basic_t *data);
-int trade_basic_update(trade_t		*trade,
-		       enum trade_step	next_step,
-		       const void	*data);
+int trade_basic_update(trade_t		   *trade,
+		       enum trade_step	   next_step,
+		       const void	   *data,
+		       const unsigned char *sender_id);
 
 void trade_execution_basic_delete(trade_execution_basic_t *execution,
 				  enum trade_step	  step);
+int trade_execution_basic_verify(const trade_execution_t *execution,
+				 const trade_t		 *trade,
+				 const unsigned char	 *sender_id);
 
 void trade_proposal_basic_init(trade_proposal_t		*trade_proposal,
 			       const trade_basic_t	*trade_data);

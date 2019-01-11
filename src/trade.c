@@ -189,15 +189,22 @@ trade_t *trade_find(const linkedlist_t	*trades,
  * @param	trade		Trade to be updated.
  * @param	next_step	Next step of a trade.
  * @param	data		Next step's data.
+ * @param	sender_id	The data received from this id.
  *
  * @return	0		Successfully updated.
  * @return	1		Incorrect data.
  */
-int trade_update(trade_t *trade, enum trade_step next_step, const void *data)
+int trade_update(trade_t		*trade,
+		 enum trade_step	next_step,
+		 const void		*data,
+		 const unsigned char	*sender_id)
 {
 	switch (trade->type) {
 		case TT_BASIC:
-			return trade_basic_update(trade, next_step, data);
+			return trade_basic_update(trade,
+						  next_step,
+						  data,
+						  sender_id);
 	}
 
 	return 1;
@@ -222,6 +229,31 @@ void trade_execution_delete(trade_execution_t	*trade_execution,
 	}
 
 	free(trade_execution);
+}
+
+/**
+ * Verify trade.execution of a trade.
+ *
+ * @param	execution	trade.execution to be verified.
+ * @param	trade		trade.execution for this trade.
+ * @param	sender_id	trade.execution received from this id.
+ *
+ * @return	0		trade.execution is legit.
+ * @return	1		trade.execution is not legit and the trade
+ *				should be aborted.
+ * @return	2		trade.execution is not legit but the trade
+ *				does not need to be aborted.
+ */
+int trade_execution_verify(const trade_execution_t	*execution,
+			   const trade_t		*trade,
+			   const unsigned char		*sender_id)
+{
+	switch (trade->type) {
+		case TT_BASIC:
+			return trade_execution_basic_verify(execution,
+							    trade,
+							    sender_id);
+	}
 }
 
 /**
