@@ -39,28 +39,52 @@ int decrypt_message(const char		*message,
 		    const unsigned char	secret_key[SECRET_KEY_SIZE],
 		    char		**decrypted)
 {
-	size_t	decrypted_len;
-	size_t	msg_len;
-	int	res;
+	size_t		decrypted_len;
+	unsigned char	*msg_bin;
+	size_t		msg_bin_len;
+	size_t		msg_len;
+	int		res;
 
 	msg_len	      = strlen(message);
-	decrypted_len = msg_len - crypto_box_SEALBYTES;
+	msg_bin_len   = msg_len >> 1;
+	decrypted_len = msg_bin_len - crypto_box_SEALBYTES;
 
+	msg_bin = (unsigned char *) malloc(msg_bin_len * sizeof(unsigned char));
+	if (!msg_bin) {
+		log_error("Allocation of an encrypted bin message");
+		return 1;
+	}
 	*decrypted = (char *) malloc((decrypted_len + 1) * sizeof(char));
 	if (!*decrypted) {
 		log_error("Allocation of a decrypted message");
+		free(msg_bin);
+		return 1;
+	}
+
+	if (sodium_hex2bin(msg_bin,
+			   (msg_bin_len * sizeof(char)),
+			   message,
+			   strlen(message),
+			   NULL,
+			   NULL,
+			   NULL)) {
+		log_error("Converting hex to bin during message decryption");
+		free(msg_bin);
+		free(*decrypted);
 		return 1;
 	}
 
 	if (!(res = crypto_box_seal_open((unsigned char *) *decrypted,
-					 (const unsigned char *) message,
-					 msg_len,
+					 msg_bin,
+					 msg_bin_len,
 					 public_key,
 					 secret_key))) {
-		decrypted[decrypted_len] = '\0';
+		(*decrypted)[decrypted_len] = '\0';
 	} else {
-		free(decrypted);
+		free(*decrypted);
 	}
+
+	free(msg_bin);
 
 	return res;
 }
@@ -70,7 +94,7 @@ int decrypt_message(const char		*message,
  *
  * @param	message		The message to be encrypted.
  * @param	public_key	The public key used for encryption.
- * @param	encrypted	Dynamically allocated encrypted message.
+ * @param	encrypted	Dynamically allocated encrypted hex message.
  *
  * @return	0		Successfully encrypted.
  * @return	1		Failure.
@@ -79,25 +103,39 @@ int encrypt_message(const char		*message,
 		    const unsigned char public_key[PUBLIC_KEY_SIZE],
 		    char		**encrypted)
 {
-	size_t encrypted_len;
-	size_t msg_len;
+	unsigned char	*encrypted_bin;
+	size_t		encrypted_bin_len;
+	size_t		encrypted_len;
+	size_t		msg_len;
 
-	msg_len	      = strlen(message);
-	encrypted_len = crypto_box_SEALBYTES + msg_len;
+	msg_len		  = strlen(message);
+	encrypted_bin_len = crypto_box_SEALBYTES + msg_len;
+	encrypted_len	  = encrypted_bin_len << 1;
 
+	encrypted_bin = (unsigned char *) malloc(encrypted_bin_len *
+						 sizeof(unsigned char));
+	if (!encrypted_bin) {
+		log_error("Allocation of an encrypted bin buffer");
+		return 1;
+	}
 	*encrypted = (char *) malloc((encrypted_len + 1) * sizeof(char));
 	if (!*encrypted) {
-		log_error("Allocation of an encrypted message");
+		log_error("Allocation of an encrypted hex message");
+		free(encrypted_bin);
 		return 1;
 	}
 
-	crypto_box_seal((unsigned char *) *encrypted,
+	crypto_box_seal(encrypted_bin,
 			(const unsigned char *) message,
 			msg_len,
 			public_key);
 
-	(*encrypted)[encrypted_len] = '\0';
+	sodium_bin2hex(*encrypted,
+		       ((encrypted_len + 1) * sizeof(char)),
+		       encrypted_bin,
+		       (encrypted_bin_len * sizeof(char)));
 
+	free(encrypted_bin);
 	return 0;
 }
 
